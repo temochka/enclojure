@@ -12,13 +12,13 @@ module Enclojure.Runtime exposing
     , resetAtom
     , setCurrentStackFrameLocation
     , sideEffect
+    , signatures
     , throw
     , toFunction
     )
 
 import Dict
 import Enclojure.Callable as Callable exposing (toThunk)
-import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Common as Types
     exposing
         ( Arity(..)
@@ -33,7 +33,8 @@ import Enclojure.Common as Types
         , Thunk(..)
         , Value(..)
         )
-import Enclojure.Value as Value
+import Enclojure.Located as Located exposing (Located(..))
+import Enclojure.Value as Value exposing (inspect)
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 
@@ -98,6 +99,51 @@ resetAtom atomId val env =
     { env | atoms = Dict.insert atomId val env.atoms }
 
 
+signatures : Callable io -> List (List String)
+signatures callable =
+    [ callable.arity0 |> Maybe.map (always [])
+    , callable.arity1
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed v _ ->
+                        [ inspect v ]
+
+                    Variadic { argNames, restArgName } _ ->
+                        [ inspect argNames, "&", inspect restArgName ]
+            )
+    , callable.arity2
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed ( a, b ) _ ->
+                        [ inspect a, inspect b ]
+
+                    Variadic { argNames, restArgName } _ ->
+                        let
+                            ( a, b ) =
+                                argNames
+                        in
+                        [ inspect a, inspect b, "& " ++ inspect restArgName ]
+            )
+    , callable.arity3
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed ( a, b, c ) _ ->
+                        [ inspect a, inspect b, inspect c ]
+
+                    Variadic { argNames, restArgName } _ ->
+                        let
+                            ( a, b, c ) =
+                                argNames
+                        in
+                        [ inspect a, inspect b, inspect c, "&", inspect restArgName ]
+            )
+    ]
+        |> List.filterMap identity
+
+
 isTruthy : Value io -> Bool
 isTruthy val =
     case val of
@@ -148,8 +194,8 @@ getFn key =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
-        , arity2 = Just <| Fixed <| toFunction (arity2 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "coll") <| toFunction (arity1 >> Const >> Ok)
+        , arity2 = Just <| Fixed ( Symbol "coll", Symbol "not-found" ) <| toFunction (arity2 >> Const >> Ok)
     }
 
 
@@ -164,7 +210,7 @@ setLookupFn set =
                 Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -175,7 +221,7 @@ mapLookupFn map =
             ValueMap.get val map |> Maybe.map Located.getValue |> Maybe.withDefault Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "key") <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -192,7 +238,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
             \v kEnv -> inputK v { kEnv | stack = List.drop 1 kEnv.stack }
     in
     case fnExpr of
-        Fn name callable ->
+        Fn { name } callable ->
             let
                 env =
                     { inputEnv

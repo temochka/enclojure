@@ -23,6 +23,7 @@ module Enclojure.Value exposing
     , tryFloat
     , tryInt
     , tryKeyword
+    , tryList
     , tryListOf
     , tryMap
     , tryNil
@@ -33,6 +34,7 @@ module Enclojure.Value exposing
     , trySequenceOf
     , tryString
     , trySymbol
+    , tryVector
     , tryVectorOf
     , vector
     , vectorFromList
@@ -238,6 +240,16 @@ extractAll extract sequence =
             (Just [])
 
 
+tryVector : Value io -> Maybe (Array.Array (Located (Value io)))
+tryVector value =
+    case value of
+        Vector v ->
+            Just v
+
+        _ ->
+            Nothing
+
+
 tryVectorOf : (Value io -> Maybe a) -> Value io -> Maybe (List a)
 tryVectorOf extract value =
     case value of
@@ -245,6 +257,16 @@ tryVectorOf extract value =
             Array.toList v
                 |> List.map Located.getValue
                 |> extractAll extract
+
+        _ ->
+            Nothing
+
+
+tryList : Value io -> Maybe (List (Located (Value io)))
+tryList value =
+    case value of
+        List l ->
+            Just l
 
         _ ->
             Nothing
@@ -338,7 +360,7 @@ inspect value =
         Number (Float x) ->
             String.fromFloat x
 
-        Fn name _ ->
+        Fn { name } _ ->
             "fn<" ++ (name |> Maybe.withDefault "anonymous") ++ ">"
 
         List l ->
@@ -463,7 +485,7 @@ vector =
 
 fn : Maybe String -> Callable io -> Value io
 fn name callable =
-    Fn name (Callable.toThunk callable)
+    Fn { name = name, doc = Nothing, signatures = [] } (Callable.toThunk callable)
 
 
 throwable : Exception -> Value io

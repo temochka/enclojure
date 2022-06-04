@@ -1122,7 +1122,8 @@ suite =
             , "(str #{})" |> (expectValue <| String "#{}")
             ]
         , describe "string/blank?"
-            [ "(string/blank? \"\")" |> (expectValue <| Bool True)
+            [ "(string/blank? nil)" |> (expectValue <| Bool True)
+            , "(string/blank? \"\")" |> (expectValue <| Bool True)
             , "(string/blank? \" \")" |> (expectValue <| Bool True)
             , "(string/blank? \"  \")" |> (expectValue <| Bool True)
             , "(string/blank? \"\\t\\n \")" |> (expectValue <| Bool True)

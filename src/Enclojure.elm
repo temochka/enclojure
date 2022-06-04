@@ -515,27 +515,34 @@ listLocate pFn l =
                     listLocate pFn rest
 
 
-exctractFnName : List (Located (Value io)) -> ( Maybe String, List (Located (Value io)) )
-exctractFnName exprs =
+exctractFnNameAndDoc : List (Located (Value io)) -> ( Maybe String, Maybe String, List (Located (Value io)) )
+exctractFnNameAndDoc exprs =
     case exprs of
+        (Located _ (Symbol name)) :: (Located _ (String doc)) :: rest ->
+            ( Just name, Just doc, rest )
+
         (Located _ (Symbol name)) :: rest ->
-            ( Just name, rest )
+            ( Just name, Nothing, rest )
 
         _ ->
-            ( Nothing, exprs )
+            ( Nothing, Nothing, exprs )
 
 
 evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalFn (Located loc exprs) fnEnv k =
     let
-        ( name, arity ) =
-            exctractFnName exprs
+        ( name, doc, arity ) =
+            exctractFnNameAndDoc exprs
     in
     case arity of
         (Located _ (Vector argBindings)) :: body ->
             Located loc
                 ( Ok
-                    ( Fn name
+                    ( Fn
+                        { name = name
+                        , doc = doc
+                        , signatures = [ argBindings |> Array.toList |> List.map (Located.getValue >> Value.inspect) ]
+                        }
                         (\fn ->
                             (\args callsiteEnv ->
                                 let
@@ -566,6 +573,19 @@ evalFn (Located loc exprs) fnEnv k =
                 )
 
         signatures ->
+            let
+                fnSignatures =
+                    signatures
+                        |> List.filterMap
+                            (Located.getValue
+                                >> Value.tryList
+                                >> Maybe.andThen List.head
+                                >> Maybe.map Located.getValue
+                                >> Maybe.andThen Value.tryVector
+                                >> Maybe.map Array.toList
+                                >> Maybe.map (List.map (Located.getValue >> Value.inspect))
+                            )
+            in
             Located loc
                 ( ( (\fn ->
                         (\args callsiteEnv ->
@@ -607,7 +627,7 @@ evalFn (Located loc exprs) fnEnv k =
                         )
                             |> Thunk
                     )
-                        |> Fn name
+                        |> Fn { name = name, signatures = fnSignatures, doc = Nothing }
                         |> Const
                   , fnEnv
                   )

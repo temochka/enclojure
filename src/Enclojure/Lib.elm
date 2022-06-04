@@ -96,7 +96,7 @@ init env =
     ]
         |> List.foldl
             (\( name, fn ) aEnv ->
-                Runtime.bindGlobal name (Fn (Just name) (Callable.toThunk fn)) aEnv
+                Runtime.bindGlobal name (Fn { name = Just name, doc = fn.doc, signatures = Runtime.signatures fn } (Callable.toThunk fn)) aEnv
             )
             env
 
@@ -112,7 +112,8 @@ atom =
             ( Ok ( Const (Ref (Atom atomId)), newEnv ), Just (Thunk k) )
     in
     { emptyCallable
-        | arity1 = Just <| Fixed arity1
+        | arity1 = Just <| Fixed (Symbol "x") arity1
+        , doc = Just "Creates and returns an Atom with an initial value of x."
     }
 
 
@@ -131,7 +132,8 @@ deref =
                     )
     in
     { emptyCallable
-        | arity1 = Just <| Fixed arity1
+        | arity1 = Just <| Fixed (Symbol "ref") arity1
+        , doc = Just "Also reader macro: @var/@atom. When applied to a var or atom, returns its current state."
     }
 
 
@@ -151,7 +153,8 @@ reset =
                     )
     in
     { emptyCallable
-        | arity2 = Just <| Fixed arity2
+        | arity2 = Just <| Fixed ( Symbol "atom", Symbol "newval" ) arity2
+        , doc = Just "Sets the value of atom to newval without regard for the current value. Returns newval."
     }
 
 
@@ -190,7 +193,9 @@ swap =
                     )
     in
     { emptyCallable
-        | arity2 = Just <| Variadic arity2
+        | arity2 = Just <| Variadic { argNames = ( Symbol "atom", Symbol "f" ), restArgName = Symbol "args" } arity2
+        , doc = Just """Atomically swaps the value of atom to be: (apply f current-value-of-atom args).
+Returns the value that was swapped in."""
     }
 
 
@@ -201,7 +206,8 @@ jsonEncode =
             Enclojure.Json.encodeToString v |> String
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| toArityFunction (arity1 >> Const >> Ok)
+        , doc = Just "Encode x as a JSON string."
     }
 
 
@@ -215,7 +221,8 @@ jsonDecode =
                 |> Result.map Const
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| toArityFunction arity1
+        , doc = Just "Attempt to decode a JSON string s as an Enclojure value."
     }
 
 
@@ -226,7 +233,8 @@ not_ =
             Ok (Const (Bool (not (Runtime.isTruthy val))))
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction arity1))
+        | arity1 = Just (Fixed (Symbol "x") (toArityFunction arity1))
+        , doc = Just "Returns true if x is logical false, false otherwise."
     }
 
 
@@ -236,7 +244,10 @@ list =
         arity0 { rest } =
             Ok (Const (List (List.map Located.unknown rest)))
     in
-    { emptyCallable | arity0 = Just (Variadic (toArityFunction arity0)) }
+    { emptyCallable
+        | arity0 = Just (Variadic { argNames = (), restArgName = Symbol "items" } (toArityFunction arity0))
+        , doc = Just "Creates a new list containing the items."
+    }
 
 
 toNumbers : List (Value io) -> Result Exception (List Number)
@@ -252,8 +263,8 @@ flip f =
     \a b -> f b a
 
 
-varargOp : { arity0 : Maybe Number, arity1 : Maybe (Number -> Number), arity2 : Number -> Number -> Number } -> Callable io
-varargOp { arity0, arity1, arity2 } =
+varargOp : { arity0 : Maybe Number, arity1 : Maybe (Number -> Number), arity2 : Number -> Number -> Number, doc : Maybe String } -> Callable io
+varargOp { arity0, arity1, arity2, doc } =
     let
         wrappedArity2 { args, rest } =
             let
@@ -269,14 +280,22 @@ varargOp { arity0, arity1, arity2 } =
                 (toNumbers rest)
     in
     { emptyCallable
-        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> toArityFunction >> Fixed)
+        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> toArityFunction >> Fixed ())
         , arity1 =
             arity1
                 |> Maybe.map
                     (\fn ->
-                        Fixed <| toArityFunction <| (toNumber >> Result.map (fn >> Number >> Const))
+                        Fixed (Symbol "x") <| toArityFunction <| (toNumber >> Result.map (fn >> Number >> Const))
                     )
-        , arity2 = (wrappedArity2 >> Result.map Const) |> toArityFunction |> Variadic |> Just
+        , arity2 =
+            (wrappedArity2 >> Result.map Const)
+                |> toArityFunction
+                |> Variadic
+                    { argNames = ( Symbol "x", Symbol "y" )
+                    , restArgName = Symbol "more"
+                    }
+                |> Just
+        , doc = doc
     }
 
 
@@ -287,6 +306,7 @@ plus =
         , arity1 = Just identity
         , arity2 =
             addNumbers
+        , doc = Just "Returns the sum of nums. (+) returns 0."
         }
 
 
@@ -336,6 +356,7 @@ minus =
 
                     ( Float a, Float b ) ->
                         Float (a - b)
+        , doc = Just "If no ys are supplied, returns the negation of x, else subtracts the ys from x and returns the result."
         }
 
 
@@ -358,6 +379,7 @@ mul =
 
                     ( Float a, Float b ) ->
                         Float (a * b)
+        , doc = Just "Returns the product of nums. (*) returns 1."
         }
 
 
@@ -382,6 +404,7 @@ div =
         { arity0 = Nothing
         , arity1 = Just (op (Int 1))
         , arity2 = op
+        , doc = Just "If no denominators are supplied, returns 1/numerator, else returns numerator divided by all of the denominators."
         }
 
 
@@ -413,7 +436,8 @@ rem =
                 (toNumber valB)
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toArityFunction <| (arity2 >> Result.map (Number >> Const))
+        | arity2 = Just <| Fixed ( Symbol "x", Symbol "b" ) <| toArityFunction <| (arity2 >> Result.map (Number >> Const))
+        , doc = Just "Returns remainder of dividing numerator by denominator."
     }
 
 
@@ -429,31 +453,52 @@ toNumber val =
 
 isLessThan : Callable io
 isLessThan =
-    compOp { intOp = (<), floatOp = (<), stringOp = (<) }
+    compOp
+        { intOp = (<)
+        , floatOp = (<)
+        , stringOp = (<)
+        , doc = Just "Returns non-nil if nums or strings are in monotonically increasing order, otherwise false."
+        }
 
 
 isLessThanOrEqual : Callable io
 isLessThanOrEqual =
-    compOp { intOp = (<=), floatOp = (<=), stringOp = (<=) }
+    compOp
+        { intOp = (<=)
+        , floatOp = (<=)
+        , stringOp = (<=)
+        , doc = Just "Returns non-nil if nums or strings are in monotonically non-decreasing order, otherwise false."
+        }
 
 
 isGreaterThan : Callable io
 isGreaterThan =
-    compOp { intOp = (>), floatOp = (>), stringOp = (>) }
+    compOp
+        { intOp = (>)
+        , floatOp = (>)
+        , stringOp = (>)
+        , doc = Just "Returns non-nil if nums are in monotonically decreasing order, otherwise false."
+        }
 
 
 isGreaterThanOrEqual : Callable io
 isGreaterThanOrEqual =
-    compOp { intOp = (>=), floatOp = (>=), stringOp = (>=) }
+    compOp
+        { intOp = (>=)
+        , floatOp = (>=)
+        , stringOp = (>=)
+        , doc = Just "Returns non-nil if nums are in monotonically non-increasing order, otherwise false."
+        }
 
 
 compOp :
     { intOp : Int -> Int -> Bool
     , floatOp : Float -> Float -> Bool
     , stringOp : String -> String -> Bool
+    , doc : Maybe String
     }
     -> Callable io
-compOp { intOp, floatOp, stringOp } =
+compOp { intOp, floatOp, stringOp, doc } =
     let
         arity1 _ =
             Ok (Bool True)
@@ -496,8 +541,13 @@ compOp { intOp, floatOp, stringOp } =
                             )
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "x") (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 =
+            Just
+                (Variadic { argNames = ( Symbol "x", Symbol "y" ), restArgName = Symbol "more" }
+                    (toArityFunction (arity2 >> Result.map Const))
+                )
+        , doc = doc
     }
 
 
@@ -524,8 +574,12 @@ isEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "x") (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 =
+            Just
+                (Variadic { argNames = ( Symbol "x", Symbol "y" ), restArgName = Symbol "more" }
+                    (toArityFunction (arity2 >> Result.map Const))
+                )
     }
 
 
@@ -552,8 +606,13 @@ isNotEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "x") (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 =
+            Just
+                (Variadic { argNames = ( Symbol "x", Symbol "y" ), restArgName = Symbol "more" }
+                    (toArityFunction (arity2 >> Result.map Const))
+                )
+        , doc = Just "Same as (not (= x y))"
     }
 
 
@@ -570,7 +629,8 @@ isSymbol =
                 |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a Symbol"
     }
 
 
@@ -587,7 +647,8 @@ isKeyword =
                 |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a Keyword"
     }
 
 
@@ -603,7 +664,8 @@ isList =
                     Bool False |> Const |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a List"
     }
 
 
@@ -619,7 +681,8 @@ isVector =
                     Bool False |> Const |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a Vector"
     }
 
 
@@ -635,7 +698,10 @@ set =
                     Value.toSeq val
                         |> Result.map (List.map Located.getValue >> ValueSet.fromList >> Set >> Const)
     in
-    { emptyCallable | arity1 = Just <| Fixed <| Callable.toArityFunction arity1 }
+    { emptyCallable
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction arity1
+        , doc = Just "Returns a set of the distinct elements of coll."
+    }
 
 
 isSet : Callable io
@@ -650,7 +716,8 @@ isSet =
                     Bool False |> Const |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a Set"
     }
 
 
@@ -666,7 +733,8 @@ isMap =
                     Bool False |> Const |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a Map"
     }
 
 
@@ -682,7 +750,8 @@ isMapEntry =
                     Bool False |> Const |> Ok
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
+        , doc = Just "Return true if x is a MapEntry"
     }
 
 
@@ -697,7 +766,14 @@ str =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (toArityFunction (arity0 >> Result.map Const)))
+        | arity0 =
+            Just
+                (Variadic { argNames = (), restArgName = Symbol "xs" }
+                    (toArityFunction (arity0 >> Result.map Const))
+                )
+        , doc = Just """With no args, returns the empty string. With one arg x, returns a string representation of x.
+(str nil) returns the empty string.
+With more than one arg, returns the concatenation of the str values of the args."""
     }
 
 
@@ -712,7 +788,12 @@ prStr =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (toArityFunction (arity0 >> Result.map Const)))
+        | arity0 =
+            Just
+                (Variadic { argNames = (), restArgName = Symbol "xs" }
+                    (toArityFunction (arity0 >> Result.map Const))
+                )
+        , doc = Just "Prints the object(s) to a string. Prints the object(s), separated by spaces if there is more than one. Prints in a way that objects can be read by the reader"
     }
 
 
@@ -762,7 +843,10 @@ seq =
                     Err (Exception (inspect coll ++ " is not sequable") [])
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "coll") (toArityFunction (arity1 >> Result.map Const)))
+        , doc = Just """Returns a seq (list) on the collection. If the collection is empty, returns nil.
+(seq nil) returns nil.
+seq also works on strings."""
     }
 
 
@@ -772,10 +856,10 @@ fixedCall mArity =
         |> Maybe.andThen
             (\arity ->
                 case arity of
-                    Fixed a ->
+                    Fixed _ a ->
                         Just a
 
-                    Variadic _ ->
+                    Variadic _ _ ->
                         Nothing
             )
         |> Maybe.withDefault
@@ -819,7 +903,8 @@ cons =
                 )
     in
     { emptyCallable
-        | arity2 = Just (Fixed arity2)
+        | arity2 = Just (Fixed ( Symbol "x", Symbol "seq" ) arity2)
+        , doc = Just "Returns a new seq where x is the first element and seq is the rest."
     }
 
 
@@ -884,7 +969,15 @@ conj =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Variadic <| toArityFunction (arity2 >> Result.map Const)
+        | arity2 =
+            Just <|
+                Variadic { argNames = ( Symbol "coll", Symbol "x" ), restArgName = Symbol "xs" } <|
+                    toArityFunction (arity2 >> Result.map Const)
+        , doc = Just """conj[oin]. Returns a new collection with the xs
+'added'. (conj nil item) returns (item).
+(conj coll) returns coll. (conj) returns [].
+The 'addition' may happen at different 'places' depending
+on the concrete type."""
     }
 
 
@@ -917,7 +1010,12 @@ contains =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toArityFunction (arity2 >> Result.map Const)
+        | arity2 = Just <| Fixed ( Symbol "coll", Symbol "key" ) <| toArityFunction (arity2 >> Result.map Const)
+        , doc = Just """Returns true if key is present in the given collection, otherwise
+returns false.  Note that for numerically indexed collections like
+vectors, this tests if the numeric key is within the
+range of indexes. 'contains?' operates constant or logarithmic time;
+it will not perform a linear search for a value. See also 'some'."""
     }
 
 
@@ -939,7 +1037,7 @@ first =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| toArityFunction (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed (Symbol "coll") <| toArityFunction (arity1 >> Result.map Const))
     }
 
 
@@ -961,7 +1059,7 @@ second =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| toArityFunction (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed (Symbol "coll") <| toArityFunction (arity1 >> Result.map Const))
     }
 
 
@@ -983,7 +1081,7 @@ peek =
                     Err <| Exception ("Cannot use " ++ inspectType val ++ " as a queue") []
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "coll") (toArityFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -1011,7 +1109,7 @@ pop =
                     Err <| Exception ("Can't use " ++ inspectType val ++ " as a queue") []
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (Symbol "coll") (toArityFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -1027,7 +1125,7 @@ isNumber =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -1043,7 +1141,7 @@ isInteger =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -1059,7 +1157,7 @@ isFloat =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -1097,7 +1195,7 @@ rest_ =
                 )
     in
     { emptyCallable
-        | arity1 = Just (Fixed arity1)
+        | arity1 = Just (Fixed (Symbol "coll") arity1)
     }
 
 
@@ -1113,7 +1211,7 @@ throw =
                     Err (Exception (inspect v ++ " is not throwable") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "ex") <| toArityFunction arity1
     }
 
 
@@ -1129,7 +1227,7 @@ newException =
                     Err (Exception "exception message must be a string" [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed (Symbol "msg") <| toArityFunction (arity1 >> Result.map Const)
     }
 
 
@@ -1174,7 +1272,7 @@ apply =
                     ( Err ( e, env ), Just (Thunk k) )
     in
     { emptyCallable
-        | arity2 = Just <| Variadic arity2
+        | arity2 = Just <| Variadic { argNames = ( Symbol "f", Symbol "x" ), restArgName = Symbol "args" } arity2
     }
 
 
@@ -1225,8 +1323,11 @@ get =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toArityFunction (arity2 >> Const >> Ok)
-        , arity3 = Just <| Fixed <| toArityFunction (arity3 >> Const >> Ok)
+        | arity2 = Just <| Fixed ( Symbol "map", Symbol "key" ) <| toArityFunction (arity2 >> Const >> Ok)
+        , arity3 =
+            Just <|
+                Fixed ( Symbol "map", Symbol "key", Symbol "not-found" ) <|
+                    toArityFunction (arity3 >> Const >> Ok)
     }
 
 
@@ -1306,7 +1407,16 @@ assoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not associable") [])
     in
-    { emptyCallable | arity3 = Just <| Variadic <| toArityFunction (arity3 >> Result.map Const) }
+    { emptyCallable
+        | arity3 =
+            Just <|
+                Variadic
+                    { argNames = ( Symbol "map", Symbol "key", Symbol "val" )
+                    , restArgName = Symbol "kvs"
+                    }
+                <|
+                    toArityFunction (arity3 >> Result.map Const)
+    }
 
 
 dissoc : Callable io
@@ -1333,7 +1443,7 @@ dissoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not dissociable") [])
     in
-    { emptyCallable | arity2 = Just <| Variadic <| toArityFunction (arity2 >> Result.map Const) }
+    { emptyCallable | arity2 = Just <| Variadic { argNames = ( Symbol "map", Symbol "key" ), restArgName = Symbol "ks" } <| toArityFunction (arity2 >> Result.map Const) }
 
 
 key_ : Callable io
@@ -1348,7 +1458,7 @@ key_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "e") <| toArityFunction arity1
     }
 
 
@@ -1364,7 +1474,7 @@ val_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "e") <| toArityFunction arity1
     }
 
 
@@ -1378,7 +1488,7 @@ reSeq =
                 (Value.tryString sValue |> Result.fromMaybe (Value.exception "second argument to re-seq must be a string"))
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "re", Symbol "s" ) <| toArityFunction arity2
     }
 
 
@@ -1392,7 +1502,7 @@ reFind =
                 (Value.tryString sValue |> Result.fromMaybe (Value.exception "second argument to re-seq must be a string"))
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "re", Symbol "s" ) <| toArityFunction arity2
     }
 
 
@@ -1425,7 +1535,7 @@ reMatches =
                 |> Result.andThen identity
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "re", Symbol "s" ) <| Callable.toArityFunction arity2
     }
 
 
@@ -1444,7 +1554,7 @@ toInt =
                     Err (Value.exception "type error: int expects a numeric argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
     }
 
 
@@ -1463,7 +1573,7 @@ toFloat_ =
                     Err (Value.exception "type error: float expects a numeric argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction arity1
     }
 
 
@@ -1494,7 +1604,8 @@ count =
                     Err (Value.exception "type error: count expects a collection or a string")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction arity1
+        , doc = Just "Returns the number of items in coll. (count nil) returns 0. Also works on strings."
     }
 
 
@@ -1525,7 +1636,8 @@ empty =
                     Err (Value.exception "type error: empty expects a collection argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction arity1
+        , doc = Just "Returns an empty collection of the same type as coll, or nil."
     }
 
 
@@ -1539,7 +1651,8 @@ keys =
                 |> Result.map (ValueMap.keys >> Value.list >> Const)
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "map") <| Callable.toArityFunction arity1
+        , doc = Just "Returns a list of the map's keys, in the same order as (seq map)."
     }
 
 
@@ -1553,7 +1666,8 @@ vals =
                 |> Result.map (ValueMap.values >> Value.list >> Const)
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "map") <| Callable.toArityFunction arity1
+        , doc = Just "Returns a list of the map's values, in the same order as (seq map)."
     }
 
 
@@ -1599,8 +1713,10 @@ nth =
             nth_ collVal indexVal (Just defaultVal)
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
-        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+        | arity2 = Just <| Fixed ( Symbol "coll", Symbol "index" ) <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed ( Symbol "coll", Symbol "index", Symbol "not-found" ) <| Callable.toArityFunction arity3
+        , doc = Just """Returns the value at the index. get returns nil if index out of
+bounds, nth throws an exception unless not-found is supplied. nth also works for strings."""
     }
 
 
@@ -1617,7 +1733,10 @@ vec =
                         |> Value.toSeq
                         |> Result.map (Value.vectorFromLocatedList >> Const)
     in
-    { emptyCallable | arity1 = Just <| Fixed <| Callable.toArityFunction arity1 }
+    { emptyCallable
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction arity1
+        , doc = Just "Creates a new vector containing the contents of coll."
+    }
 
 
 vector : Callable io
@@ -1626,36 +1745,60 @@ vector =
         arity0 signature =
             Value.vectorFromList signature.rest |> Const |> Ok
     in
-    { emptyCallable | arity0 = Just <| Variadic <| Callable.toArityFunction arity0 }
+    { emptyCallable
+        | arity0 =
+            Just <|
+                Variadic { argNames = (), restArgName = Symbol "xs" } <|
+                    Callable.toArityFunction arity0
+        , doc = Just "Creates a new vector containing xs."
+    }
 
 
 prelude : String
 prelude =
     """
-(defn complement [f]
+(defn complement
+  "Takes a fn f and returns a fn that takes the same arguments as f, has the same effects,
+   if any, and returns the opposite truth value."
+  [f]
   (fn [& args] (not (apply f args))))
 
-(defn identity [a] a)
+(defn identity
+  "Returns its argument."
+  [a]
+  a)
 
-(defn comp [& fns]
+(defn comp
+  "Takes a set of functions and returns a fn that is the composition
+   of those fns.  The returned fn takes a variable number of args,
+   applies the rightmost of fns to the args, the next
+   fn (right-to-left) to the result, etc."
+  [& fns]
   (reduce
     (fn [a e] (fn [& args] (a (apply e args))))
     identity
     fns))
 
 (defn last
+  "Return the last item in coll, in linear time."
   [coll]
   (if (next coll)
     (last (rest coll))
     (first coll)))
 
-(defn next [coll]
+(defn next
+  "Returns a seq of the items after the first. Calls seq on its argument. If there are no more items, returns nil."
+  [coll]
   (seq (rest coll)))
 
-(defn reverse [coll]
+(defn reverse
+  "Returns a seq of the items in coll in reverse order."
+  [coll]
   (reduce (fn [a e] (cons e a)) (list) coll))
 
-(defn concat [& colls]
+(defn concat
+  "Returns a seq representing the concatenation of the elements in the supplied colls."
+  [& colls]
   (when (seq colls)
    (let [coll (first colls)]
      (reduce
@@ -1663,10 +1806,17 @@ prelude =
       (apply concat (rest colls))
       (reverse coll)))))
 
-(defn into [to from]
+(defn into
+  "Returns a new coll consisting of to-coll with all of the items of from-coll conjoined."
+  [to from]
   (reduce conj to from))
 
-(defn map [f coll]
+(defn map
+  "Returns a list consisting of the result of applying f to
+   first item of coll, followed by applying f to the
+   second item in coll, until coll
+   exhausted."
+  [f coll]
   (if (seq coll)
     (cons (f (first coll)) (map f (rest coll)))
     (list)))
@@ -1676,15 +1826,25 @@ prelude =
     (cons (f i (first coll)) (-map-indexed (inc i) f (rest coll)))
     (list)))
 
-(defn map-indexed [f coll]
+(defn map-indexed
+  "Returns a list consisting of the result of applying f to 0
+   and the first item of coll, followed by applying f to 1 and the second
+   item in coll, etc, until coll is exhausted. Thus function f should
+   accept 2 arguments, index and item."
+  [f coll]
   (-map-indexed 0 f coll))
 
-(defn mapcat [f coll]
+(defn mapcat
+  "Returns the result of applying concat to the result of applying map
+   to f and coll. Thus function f should return a collection."
+  [f coll]
   (if (seq coll)
     (concat (f (first coll)) (mapcat f (rest coll)))
     (list)))
 
-(defn filter [pred coll]
+(defn filter
+  "Returns a list of the items in coll for which (pred item) returns logical true."
+  [pred coll]
   (if (seq coll)
     (let [el (first coll)]
       (if (pred el)
@@ -1692,30 +1852,49 @@ prelude =
         (filter pred (rest coll))))
     (list)))
 
-(defn remove [pred coll]
+(defn remove
+  "Returns a list of the items in coll for which (pred item) returns logical false."
+  [pred coll]
   (filter (complement pred) coll))
 
-(defn drop [n coll]
+(defn drop
+  "Returns a list of all but the first n items in coll."
+  [n coll]
   (if (and (seq coll) (pos? n))
     (drop (dec n) (rest coll))
     (or (seq coll) (list))))
 
-(defn take [n coll]
+(defn take
+  "Returns a list of the first n items in coll, or all items if there are fewer than n."
+  [n coll]
   (if (and (seq coll) (pos? n))
     (cons (first coll) (take (dec n) (rest coll)))
     (list)))
 
-(defn drop-while [pred coll]
+(defn drop-while
+  "Returns a list of the items in coll starting from the first item for which (pred item) returns logical false."
+  [pred coll]
   (if (and (seq coll) (pred (first coll)))
     (drop-while pred (rest coll))
     (or (seq coll) (list))))
 
-(defn take-while [pred coll]
+(defn take-while
+  "Returns a list of successive items from coll while (pred item) returns logical true."
+  [pred coll]
   (if (and (seq coll) (pred (first coll)))
     (cons (first coll) (take-while pred (rest coll)))
     (list)))
 
 (defn reduce
+  "f should be a function of 2 arguments. If val is not supplied,
+   returns the result of applying f to the first 2 items in coll, then
+   applying f to that result and the 3rd item, etc. If coll contains no
+   items, f must accept no arguments as well, and reduce returns the
+   result of calling f with no arguments.  If coll has only 1 item, it
+   is returned and f is not called.  If val is supplied, returns the
+   result of applying f to val and the first item in coll, then
+   applying f to that result and the 2nd item, etc. If coll contains no
+   items, returns val and f is not called."
   ([f coll]
    (reduce f (f) coll))
   ([f init coll]
@@ -1724,6 +1903,11 @@ prelude =
      init)))
 
 (defn reduce-kv
+  "Reduces a map. f should be a function of 3
+   arguments. Returns the result of applying f to init, the first key
+   and the first value in coll, then applying f to that result and the
+   2nd key and value, etc. If coll contains no entries, returns init
+   and f is not called."
   ([f coll]
    (reduce-kv f (f) coll))
   ([f init coll]
@@ -1732,6 +1916,7 @@ prelude =
      init)))
 
 (defn every?
+  "Returns true if (pred x) is logical true for every x in coll, else false."
   [pred coll]
   (if (seq coll)
     (if (pred (first coll))
@@ -1740,34 +1925,49 @@ prelude =
     true))
 
 (defn not-every?
+  "Returns false if (pred x) is logical true for every x in coll, else true."
   [pred coll]
   (not (every? pred coll)))
 
 (defn not-any?
+  "Returns false if (pred x) is logical true for any x in coll, else true."
   [pred coll]
   (not (some pred coll)))
 
-(defn repeat [n x]
+(defn repeat
+  "Returns a list of length n of xs."
+  [n x]
   (if (pos? n)
     (cons x (repeat (dec n) x))
     (list)))
 
-(defn pos? [x]
+(defn pos?
+  "Returns true if x is greater than zero, else false."
+  [x]
   (< 0 x))
 
-(defn neg? [x]
+(defn neg?
+  "Returns true if x is less than zero, else false."
+  [x]
   (< x 0))
 
-(defn zero? [x]
+(defn zero?
+  "Returns true if x is zero, else false."
+  [x]
   (= x 0))
 
-(defn inc [x]
+(defn inc
+  "Returns a number one greater than num."
+  [x]
   (+ x 1))
 
-(defn dec [x]
+(defn dec
+  "Returns a number one less than num."
+  [x]
   (- x 1))
 
 (defn mod
+  "Modulus of num and div. Truncates toward negative infinity."
   [num div]
   (let [m (rem num div)]
     (if (or (zero? m) (= (pos? num) (pos? div)))
@@ -1775,21 +1975,30 @@ prelude =
       (+ m div))))
 
 (defn even?
+  "Returns true if n is even, throws an exception if n is not an integer."
   [n]
   (if (integer? n)
     (zero? (rem n 2))
     (throw (Exception. (str "Argument must be an integer: " n)))))
 
-(defn odd? [n]
+(defn odd?
+  "Returns true if n is odd, throws an exception if n is not an integer."
+  [n]
   (not (even? n)))
 
 (defn get-in
+  "Returns the value in a nested associative structure,
+   where ks is a sequence of keys. Returns nil if the key
+   is not present, or the not-found value if supplied."
   ([m ks]
    (reduce get m ks))
   ([m ks not-found]
    (reduce #(get %1 %2 not-found) m ks)))
 
 (defn assoc-in
+  "Associates a value in a nested associative structure, where ks is a
+   sequence of keys and v is the new value and returns a new nested structure.
+   If any levels do not exist, hash-maps will be created."
   ([m ks v]
    (let [k (first ks)
          ks (rest ks)]
@@ -1798,6 +2007,10 @@ prelude =
        (assoc m k v)))))
 
 (defn some
+  "Returns the first logical true value of (pred x) for any x in coll,
+   else nil.  One common idiom is to use a set as pred, for example
+   this will return :fred if :fred is in the sequence, otherwise nil:
+   (some #{:fred} coll)"
   [pred coll]
   (if (seq coll)
     (let [x (first coll)
@@ -1807,14 +2020,24 @@ prelude =
        (some pred (rest coll))))))
 
 (defn update
+  "'Updates' a value in an associative structure, where k is a
+   key and f is a function that will take the old value
+   and any supplied args and return the new value, and returns a new
+   structure.  If the key does not exist, nil is passed as the old value."
   ([m k f & args]
    (assoc m k (apply f (get m k) args))))
 
 (defn update-in
+  "'Updates' a value in a nested associative structure, where ks is a
+   sequence of keys and f is a function that will take the old value
+   and any supplied args and return the new value, and returns a new
+   nested structure.  If any levels do not exist, hash-maps will be
+   created."
   ([m ks f & args]
    (assoc-in m ks (apply f (get-in m ks) args))))
 
 (defn dedupe
+  "Returns a list removing consecutive duplicates in coll."
   [coll]
   (if (seq coll)
     (let [el (first coll)
@@ -1832,73 +2055,102 @@ prelude =
     ()))
 
 (defn distinct
+  "Returns a list of the elements of coll with duplicates removed."
   [coll]
   (-distinct #{} coll))
 
 (defn fnil
+  "Takes a function f, and returns a function that calls f, replacing
+   a nil first argument to f with the supplied value x. Higher arity
+   versions can replace arguments in the second and third
+   positions (y, z). Note that the function f can take any number of
+   arguments, not just the one(s) being nil-patched."
   [f default]
   (fn [& args]
     (apply f (if (= nil (first args)) default (first args)) (rest args))))
 
 (defn empty?
+  "Returns true if coll has no items - same as (not (seq coll)).
+   Please use the idiom (seq x) rather than (not (empty? x))"
   [coll]
   (not (seq coll)))
 
 (defn update-vals
+  "Given a map m and a function f of 1-argument, returns a new map where the keys of m
+   are mapped to result of applying f to the corresponding values of m."
   [m f]
   (reduce-kv (fn [a k v] (assoc a k (f v))) {} m))
 
 (defn constantly
+  "Returns a function that takes any number of arguments and returns x."
   [x]
   (fn [& _args] x))
 
 (defn nil?
+  "Returns true if x is nil, false otherwise."
   [x]
   (= nil x))
 
 (defn true?
+  "Returns true if x is true, false otherwise."
   [x]
   (= true x))
 
 (defn false?
+  "Returns true if x is false, false otherwise."
   [x]
   (= false x))
 
 (defn some?
+  "Returns true if x is not nil, false otherwise."
   [x]
   (not= nil x))
 
 (defn distinct?
+  "Returns true if no two of the arguments are ="
   [x & args]
   (= (inc (count args)) (count (into #{x} args))))
 
 (defn max
+  "Returns the greatest of the nums."
   [x & rst]
   (reduce #(if (< %1 %2) %2 %1) x rst))
 
 (defn min
+  "Returns the least of the nums."
   [x & rst]
   (reduce #(if (< %1 %2) %1 %2) x rst))
 
 (defn abs
+  "Returns the absolute value of a.
+   If a is a double and zero => +0.0
+   If a is a double and ##Inf or ##-Inf => ##Inf
+   If a is a double and ##NaN => ##NaN"
   [x]
   (if (neg? x) (* -1 x) x))
 
 (defn not-empty
+  "If coll is empty, returns nil, else coll,"
   [coll]
   (when (seq coll) coll))
 
 (defn repeatedly
+  "Takes a function of no args, presumably with side effects, and
+   returns an list of n results of calling f."
   [n f]
   (if (< n 1)
     ()
     (cons (f) (repeatedly (dec n) f))))
 
 (defn assert
+  "Evaluates expr and throws an exception if it does not evaluate to logical true."
   ([x] (assert x "assertion error"))
   ([x message] (when-not x (throw (Exception. message)))))
 
 (defn range
+  "Returns a list of nums from start (inclusive) to end
+  (exclusive), by step, where start defaults to 0, step to 1.
+  When step is equal to 0, returns an empty list. When start is equal to end, returns empty list."
   ([end] (range 0 end 1))
   ([start end] (range start end 1))
   ([start end step]
@@ -1907,7 +2159,9 @@ prelude =
     (cons start (range (+ step start) end step))
     ())))
 
-(defn keep [f coll]
+(defn keep
+  "Returns a list of the non-nil results of (f item). Note, this means false return values will be included."
+  [f coll]
   (if (seq coll)
     (let [el (first coll)]
       (if-let [v (f el)]
@@ -1923,6 +2177,8 @@ prelude =
         (-keep-indexed (inc i) f (rest coll))))
     (list)))
 
-(defn keep-indexed [f coll]
+(defn keep-indexed
+  "Returns a list of the non-nil results of (f index item). Note, this means false return values will be included."
+  [f coll]
   (-keep-indexed 0 f coll))
 """

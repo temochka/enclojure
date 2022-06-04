@@ -2,8 +2,8 @@ module Enclojure.Reader.Macros exposing (macroexpandAll)
 
 import Array
 import Dict exposing (Dict)
-import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 
@@ -142,6 +142,25 @@ macroexpand i (Located loc value) =
 expandDefn : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandDefn i (Located loc args) =
     case args of
+        (Located _ (Symbol name)) :: (Located _ (String doc)) :: fnBody ->
+            Ok
+                ( i
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "def")
+                        , Located loc (Symbol name)
+                        , Located loc
+                            (List
+                                (Located loc (Symbol "fn")
+                                    :: Located loc (Symbol name)
+                                    :: Located loc (String doc)
+                                    :: fnBody
+                                )
+                            )
+                        ]
+                    )
+                )
+
         (Located _ (Symbol name)) :: fnBody ->
             Ok
                 ( i

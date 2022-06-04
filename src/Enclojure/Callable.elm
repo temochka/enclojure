@@ -22,7 +22,8 @@ type alias Callable io =
 
 new : Callable io
 new =
-    { arity0 = Nothing
+    { doc = Nothing
+    , arity0 = Nothing
     , arity1 = Nothing
     , arity2 = Nothing
     , arity3 = Nothing
@@ -59,14 +60,14 @@ setArity3 arity callable =
     { callable | arity3 = Just arity }
 
 
-fixedArity : (a -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
-fixedArity fn =
-    Enclojure.Common.Fixed <| toArityFunction fn
+fixedArity : a -> (a -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
+fixedArity signature fn =
+    Enclojure.Common.Fixed signature <| toArityFunction fn
 
 
-variadicArity : ({ args : a, rest : List (Value io) } -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
-variadicArity fn =
-    Enclojure.Common.Variadic <| toArityFunction fn
+variadicArity : { argNames : a, restArgName : Value io } -> ({ args : a, rest : List (Value io) } -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
+variadicArity signature fn =
+    Enclojure.Common.Variadic signature <| toArityFunction fn
 
 
 toThunk : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
@@ -91,10 +92,10 @@ dispatch callable args env k =
                 |> Maybe.map
                     (\arity0 ->
                         case arity0 of
-                            Fixed fn ->
+                            Fixed _ fn ->
                                 fn () env k
 
-                            Variadic fn ->
+                            Variadic _ fn ->
                                 fn { args = (), rest = [] } env k
                     )
                 |> Maybe.withDefault ( Err ( Exception "Invalid arity 0" env.stack, env ), Just (Thunk k) )
@@ -108,10 +109,10 @@ dispatch callable args env k =
                             |> Maybe.map
                                 (\arity1 ->
                                     case arity1 of
-                                        Fixed fn ->
+                                        Fixed _ fn ->
                                             fn a0 env k
 
-                                        Variadic fn ->
+                                        Variadic _ fn ->
                                             fn { args = a0, rest = [] } env k
                                 )
                     )
@@ -131,10 +132,10 @@ dispatch callable args env k =
                             |> Maybe.map
                                 (\arity2 ->
                                     case arity2 of
-                                        Fixed fn ->
+                                        Fixed _ fn ->
                                             fn ( a0, a1 ) env k
 
-                                        Variadic fn ->
+                                        Variadic _ fn ->
                                             fn { args = ( a0, a1 ), rest = [] } env k
                                 )
                     )
@@ -159,10 +160,10 @@ dispatch callable args env k =
                             |> Maybe.map
                                 (\arity3 ->
                                     case arity3 of
-                                        Fixed fn ->
+                                        Fixed _ fn ->
                                             fn ( a0, a1, a2 ) env k
 
-                                        Variadic fn ->
+                                        Variadic _ fn ->
                                             fn { args = ( a0, a1, a2 ), rest = [] } env k
                                 )
                     )
@@ -201,9 +202,9 @@ extractVariadic arity =
         |> Maybe.andThen
             (\a ->
                 case a of
-                    Fixed _ ->
+                    Fixed _ _ ->
                         Nothing
 
-                    Variadic fn ->
+                    Variadic _ fn ->
                         Just fn
             )

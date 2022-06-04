@@ -1,9 +1,9 @@
 module Enclojure.Lib.String exposing (init)
 
 import Enclojure.Callable as Callable
+import Enclojure.Common as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
-import Enclojure.Common as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Value as Value exposing (inspect)
 import Regex
 
@@ -37,7 +37,7 @@ init env =
     ]
         |> List.foldl
             (\( name, fn ) ->
-                Runtime.bindGlobal name (Fn (Just name) (Callable.toThunk fn))
+                Runtime.bindGlobal name (Fn { name = Just name, doc = Nothing, signatures = Runtime.signatures fn } (Callable.toThunk fn))
             )
             env
 
@@ -57,7 +57,8 @@ splitLines =
                     Err (Exception ("type error: expected string, got " ++ inspect val) [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction (arity1 >> Result.map Const)
+        , doc = Just "Splits s on \\n or \\r\\n. Trailing empty lines are not returned."
     }
 
 
@@ -70,7 +71,8 @@ length =
                 |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction (arity1 >> Result.map Const)
+        , doc = Just "Returns the length of string s."
     }
 
 
@@ -90,22 +92,29 @@ join =
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
-        , arity2 = Just <| Fixed <| Callable.toArityFunction (arity2 >> Result.map Const)
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction (arity1 >> Result.map Const)
+        , arity2 = Just <| Fixed ( Symbol "sep", Symbol "coll" ) <| Callable.toArityFunction (arity2 >> Result.map Const)
+        , doc = Just "Returns a string of all elements in coll, as returned by (seq coll), separated by an optional separator."
     }
 
 
 isBlank : Types.Callable io
 isBlank =
     let
-        arity1 s =
-            s
-                |> Value.tryString
-                |> Maybe.map (String.trim >> String.isEmpty >> Bool >> Const)
-                |> Result.fromMaybe (Value.exception "type error: blank? expects a string")
+        arity1 sVal =
+            case sVal of
+                String s ->
+                    s |> String.trim |> String.isEmpty |> Bool |> Const |> Ok
+
+                Nil ->
+                    Ok <| Const <| Bool True
+
+                _ ->
+                    Err (Value.exception "type error: blank? expects a string or nil")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "True if s is nil, empty, or contains only whitespace."
     }
 
 
@@ -126,7 +135,8 @@ capitalize =
                 |> Result.fromMaybe (Value.exception "type error: capitalize expects a string")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Converts first character of the string to upper-case, all other characters to lower-case."
     }
 
 
@@ -140,7 +150,8 @@ endsWith =
                 |> Result.fromMaybe (Value.exception "type error: ends-with? expects a string")
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "substr" ) <| Callable.toArityFunction arity2
+        , doc = Just "True if s ends with substr."
     }
 
 
@@ -154,7 +165,8 @@ startsWith =
                 |> Result.fromMaybe (Value.exception "type error: starts-with? expects a string")
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "substr" ) <| Callable.toArityFunction arity2
+        , doc = Just "True if s starts with substr."
     }
 
 
@@ -168,7 +180,8 @@ includes =
                 |> Result.fromMaybe (Value.exception "type error: includes? expects two string arguments")
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "substr" ) <| Callable.toArityFunction arity2
+        , doc = Just "True if s includes substr."
     }
 
 
@@ -204,8 +217,9 @@ indexOf =
                 |> Result.fromMaybe (Value.exception "type error: last-index-of expects two string arguments and one int argument")
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
-        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "substr" ) <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed ( Symbol "s", Symbol "substr", Symbol "from-index" ) <| Callable.toArityFunction arity3
+        , doc = Just "Return index of value (string or char) in s, optionally searching forward from from-index. Return nil if value not found."
     }
 
 
@@ -243,8 +257,9 @@ lastIndexOf =
                 |> Result.fromMaybe (Value.exception "type error: last-index-of expects two string arguments and one int argument")
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
-        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "substr" ) <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed ( Symbol "s", Symbol "substr", Symbol "from-index" ) <| Callable.toArityFunction arity3
+        , doc = Just "Return last index of value (string or char) in s, optionally searching backward from from-index. Return nil if value not found."
     }
 
 
@@ -258,7 +273,8 @@ lowerCase =
                 |> Result.fromMaybe (Value.exception "type error: lower-case expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Converts string to all lower-case."
     }
 
 
@@ -272,7 +288,8 @@ upperCase =
                 |> Result.fromMaybe (Value.exception "type error: upper-case expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Converts string to all upper-case."
     }
 
 
@@ -313,7 +330,29 @@ replace =
                 |> Result.fromMaybe (Value.exception "type error: wrong argument types to replace")
     in
     { emptyCallable
-        | arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+        | arity3 = Just <| Fixed ( Symbol "s", Symbol "match", Symbol "replacement" ) <| Callable.toArityFunction arity3
+        , doc = Just """Replaces all instance of match with replacement in s.
+
+match/replacement can be:
+
+string / string
+pattern / string
+
+See also replace-first.
+
+The replacement is literal (i.e. none of its characters are treated
+specially) for all cases above except pattern / string.
+
+For pattern / string, $1, $2, etc. in the replacement string are
+substituted with the string that matched the corresponding
+parenthesized group in the pattern.  If you wish your replacement
+string r to be used literally, use (re-quote-replacement r) as the
+replacement argument.  See also documentation for
+java.util.regex.Matcher's appendReplacement method.
+
+Example:
+(string/replace "Almost Pig Latin" #"\\b(\\w)(\\w+)\\b" "$2$1ay")
+-> "lmostAay igPay atinLay" """
     }
 
 
@@ -338,7 +377,30 @@ replaceFirst =
                 |> Result.fromMaybe (Value.exception "type error: wrong argument types to replace-first")
     in
     { emptyCallable
-        | arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+        | arity3 = Just <| Fixed ( Symbol "s", Symbol "match", Symbol "replacement" ) <| Callable.toArityFunction arity3
+        , doc = Just """Usage: (replace s match replacement)
+Replaces all instance of match with replacement in s.
+
+match/replacement can be:
+
+string / string
+pattern / string
+
+See also replace-first.
+
+The replacement is literal (i.e. none of its characters are treated
+specially) for all cases above except pattern / string.
+
+For pattern / string, $1, $2, etc. in the replacement string are
+substituted with the string that matched the corresponding
+parenthesized group in the pattern.  If you wish your replacement
+string r to be used literally, use (re-quote-replacement r) as the
+replacement argument.  See also documentation for
+java.util.regex.Matcher's appendReplacement method.
+
+Example:
+(string/replace "Almost Pig Latin" #"\\b(\\w)(\\w+)\\b" "$2$1ay")
+-> "lmostAay igPay atinLay" """
     }
 
 
@@ -352,7 +414,8 @@ reverse =
                 |> Result.fromMaybe (Value.exception "type error: reverse expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Returns s with its characters reversed."
     }
 
 
@@ -371,7 +434,10 @@ split =
                 )
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        | arity2 = Just <| Fixed ( Symbol "s", Symbol "splitter" ) <| Callable.toArityFunction arity2
+        , doc = Just """Splits string on a regular expression or a string.  Optional argument limit is
+the maximum number of parts. Not lazy. Returns vector of the parts.
+Trailing empty strings are not returned - pass limit of -1 to return all."""
     }
 
 
@@ -385,7 +451,8 @@ trim =
                 |> Result.fromMaybe (Value.exception "type error: trim expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Removes whitespace from both ends of string."
     }
 
 
@@ -399,7 +466,8 @@ triml =
                 |> Result.fromMaybe (Value.exception "type error: triml expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Removes whitespace from the left side of string."
     }
 
 
@@ -413,5 +481,6 @@ trimr =
                 |> Result.fromMaybe (Value.exception "type error: trimr expects one string argument")
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Removes whitespace from the right side of string."
     }

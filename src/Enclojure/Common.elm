@@ -42,8 +42,8 @@ type Thunk io
 
 
 type Arity io a
-    = Fixed (a -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
-    | Variadic ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
+    = Fixed a (a -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
+    | Variadic { argNames : a, restArgName : Value io } ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
 
 
 type IO io
@@ -52,7 +52,8 @@ type IO io
 
 
 type alias Callable io =
-    { arity0 : Maybe (Arity io ())
+    { doc : Maybe String
+    , arity0 : Maybe (Arity io ())
     , arity1 : Maybe (Arity io (Value io))
     , arity2 : Maybe (Arity io ( Value io, Value io ))
     , arity3 : Maybe (Arity io ( Value io, Value io, Value io ))
@@ -100,11 +101,18 @@ type Ref io
     | Atom Int
 
 
+type alias FnInfo =
+    { name : Maybe String
+    , doc : Maybe String
+    , signatures : List (List String)
+    }
+
+
 type Value io
     = Number Number
     | String String
     | Ref (Ref io)
-    | Fn (Maybe String) ({ self : Value io, k : Continuation io } -> Thunk io)
+    | Fn FnInfo ({ self : Value io, k : Continuation io } -> Thunk io)
     | List (List (Located (Value io)))
     | Vector (Array (Located (Value io)))
     | Nil
