@@ -1,6 +1,6 @@
 # Enclojure
 
-Enclojure is a Clojure-like scripting language for Elm apps.
+Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experimental software.
 
 * [Elm API](https://package.elm-lang.org/packages/temochka/enclojure/latest/)
 * [Enclojure API](./API.md)
