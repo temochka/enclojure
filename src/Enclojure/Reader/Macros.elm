@@ -2,7 +2,7 @@ module Enclojure.Reader.Macros exposing (macroexpandAll)
 
 import Array
 import Dict exposing (Dict)
-import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Common exposing (Exception(..), FnInfo, Number(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
@@ -63,74 +63,167 @@ macroexpandAllInternal i v =
             Err e
 
 
+type Macro io
+    = Macro FnInfo (Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) ))
+
+
+all : List (Macro io)
+all =
+    [ Macro { name = Just "__lambda", doc = Just "", signatures = [] } expandLambda
+    , Macro
+        { name = Just "and"
+        , doc = Just """Evaluates exprs one at a time, from left to right. If a form
+returns logical false (nil or false), and returns that value and
+doesn't evaluate any of the other expressions, otherwise it returns
+the value of the last expr. (and) returns true."""
+        , signatures = [ [ "x" ], [ "x", "&", "next" ] ]
+        }
+        expandAnd
+    , Macro
+        { name = Just "cond"
+        , doc = Just """Takes a set of test/expr pairs. It evaluates each test one at a
+time.  If a test returns logical true, cond evaluates and returns
+the value of the corresponding expr and doesn't evaluate any of the
+other tests or exprs. (cond) returns nil.
+
+If the test is a :let keyword, the next test/expr pair will be wrapped in a let expression with the values supplied
+as the expr for the :let.
+"""
+        , signatures = [ [ "&", "clauses" ] ]
+        }
+        expandCond
+    , Macro
+        { name = Just "defn"
+        , doc = Just """Same as (def name "doc" (fn [params* ] exprs*)) or (def
+name (fn "doc" ([params* ] exprs*)+))."""
+        , signatures = [ [ "name", "doc-string?", "[params*]", "body" ], [ "name", "doc-string?", "&", "bodies" ] ]
+        }
+        expandDefn
+    , Macro
+        { name = Just "doseq"
+        , doc = Just """Repeatedly executes body (presumably for side-effects) with
+bindings and filtering as provided by "for".  Does not retain
+the head of the sequence. Returns nil."""
+        , signatures = [ [ "seq-exprs", "&", "body" ] ]
+        }
+        expandDoseq
+    , Macro
+        { name = Just "dotimes"
+        , doc = Just """bindings => name n
+
+Repeatedly executes body (presumably for side-effects) with name
+bound to integers from 0 through n-1."""
+        , signatures = [ [ "bindings", "& body" ] ]
+        }
+        expandDotimes
+    , Macro
+        { name = Just "for"
+        , doc = Just """List comprehension. Takes a vector of one or more
+ binding-form/collection-expr pairs, each followed by zero or more
+ modifiers, and yields a list of evaluations of expr.
+ Collections are iterated in a nested fashion, rightmost fastest,
+ and nested coll-exprs can refer to bindings created in prior
+ binding-forms.  Supported modifiers are: :let [binding-form expr ...],
+ :when test.
+
+(take 100 (for [x (range 100000000) y (range 1000000) :when (< y x)] [x y]))"""
+        , signatures = [ [ "seq-exprs", "body-expr" ] ]
+        }
+        expandFor
+    , Macro
+        { name = Just "if-let"
+        , doc = Just """bindings => binding-form test
+
+If test is true, evaluates then with binding-form bound to the value of
+test, if not, yields else"""
+        , signatures = [ [ "bindings", "then" ], [ "bindings", "then", "else", "&", "oldform" ] ]
+        }
+        expandIfLet
+    , Macro
+        { name = Just "or"
+        , doc = Just """Evaluates exprs one at a time, from left to right. If a form
+returns a logical true value, or returns that value and doesn't
+evaluate any of the other expressions, otherwise it returns the
+value of the last expression. (or) returns nil."""
+        , signatures = [ [], [ "x" ], [ "x", "&", "next" ] ]
+        }
+        expandOr
+    , Macro
+        { name = Just "some->"
+        , doc = Just """When expr is not nil, threads it into the first form (via ->),
+and when that result is not nil, through the next etc"""
+        , signatures = [ [ "expr", "&", "forms" ] ]
+        }
+        expandThreadSomeFirst
+    , Macro
+        { name = Just "some->>"
+        , doc = Just """When expr is not nil, threads it into the first form (via ->>),
+and when that result is not nil, through the next etc"""
+        , signatures = [ [ "expr", "&", "forms" ] ]
+        }
+        expandThreadSomeLast
+    , Macro
+        { name = Just "when"
+        , doc = Just """Evaluates test. If logical true, evaluates body in an implicit do."""
+        , signatures = [ [ "test", "&", "body" ] ]
+        }
+        expandWhen
+    , Macro
+        { name = Just "when-let"
+        , doc = Just """bindings => binding-form test
+
+When test is true, evaluates body with binding-form bound to the value of test"""
+        , signatures = [ [ "bindings", "&", "body" ] ]
+        }
+        expandWhenLet
+    , Macro
+        { name = Just "when-not"
+        , doc = Just "Evaluates test. If logical false, evaluates body in an implicit do."
+        , signatures = [ [ "test", "&", "body" ] ]
+        }
+        expandWhenNot
+    , Macro
+        { name = Just "->"
+        , doc = Just """Threads the expr through the forms. Inserts x as the
+second item in the first form, making a list of it if it is not a
+list already. If there are more forms, inserts the first form as the
+second item in second form, etc."""
+        , signatures = [ [ "x", "&", "forms" ] ]
+        }
+        expandThreadFirst
+    , Macro
+        { name = Just "->>"
+        , doc = Just """Threads the expr through the forms. Inserts x as the
+last item in the first form, making a list of it if it is not a
+list already. If there are more forms, inserts the first form as the
+last item in second form, etc."""
+        , signatures = [ [ "x", "&", "forms" ] ]
+        }
+        expandThreadLast
+    ]
+
+
+allByName : Dict String (Macro io)
+allByName =
+    List.foldl
+        (\((Macro { name } _) as macro) acc ->
+            name |> Maybe.map (\n -> Dict.insert n macro acc) |> Maybe.withDefault acc
+        )
+        Dict.empty
+        all
+
+
 macroexpand : Int -> Located (Value io) -> Result Exception (Expansion ( Int, Located (Value io) ))
 macroexpand i (Located loc value) =
     case value of
         List l ->
             case l of
-                (Located _ (Symbol "__lambda")) :: args ->
-                    expandLambda i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "and")) :: args ->
-                    expandAnd i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "cond")) :: args ->
-                    expandCond i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "defn")) :: args ->
-                    expandDefn i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "doseq")) :: args ->
-                    expandDoseq i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "dotimes")) :: args ->
-                    expandDotimes i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "for")) :: args ->
-                    expandFor i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "if-let")) :: args ->
-                    expandIfLet i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "or")) :: args ->
-                    expandOr i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "some->")) :: args ->
-                    expandThreadSomeFirst i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "some->>")) :: args ->
-                    expandThreadSomeLast i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "when")) :: args ->
-                    expandWhen i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "when-let")) :: args ->
-                    expandWhenLet i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "when-not")) :: args ->
-                    expandWhenNot i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "->")) :: args ->
-                    expandThreadFirst i (Located loc args)
-                        |> Result.map Expanded
-
-                (Located _ (Symbol "->>")) :: args ->
-                    expandThreadLast i (Located loc args)
-                        |> Result.map Expanded
+                (Located _ (Symbol name)) :: args ->
+                    allByName
+                        |> Dict.get name
+                        |> Maybe.map (\(Macro _ expand) -> expand i (Located loc args))
+                        |> Maybe.map (Result.map Expanded)
+                        |> Maybe.withDefault (Ok (Returned ( i, Located loc value )))
 
                 _ ->
                     Ok (Returned ( i, Located loc value ))

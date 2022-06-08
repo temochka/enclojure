@@ -524,6 +524,9 @@ exctractFnNameAndDoc exprs =
         (Located _ (Symbol name)) :: rest ->
             ( Just name, Nothing, rest )
 
+        (Located _ (String doc)) :: rest ->
+            ( Nothing, Just doc, rest )
+
         _ ->
             ( Nothing, Nothing, exprs )
 

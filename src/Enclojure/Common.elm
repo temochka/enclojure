@@ -4,6 +4,7 @@ module Enclojure.Common exposing
     , Continuation
     , Env
     , Exception(..)
+    , FnInfo
     , IO(..)
     , Number(..)
     , Ref(..)
