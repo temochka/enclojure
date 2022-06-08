@@ -1,4 +1,4 @@
-module Enclojure.Reader.Macros exposing (macroexpandAll)
+module Enclojure.Reader.Macros exposing (all, macroexpandAll)
 
 import Array
 import Dict exposing (Dict)
@@ -63,8 +63,10 @@ macroexpandAllInternal i v =
             Err e
 
 
-type Macro io
-    = Macro FnInfo (Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) ))
+type alias Macro io =
+    { info : FnInfo
+    , expand : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+    }
 
 
 all : List (Macro io)
@@ -206,8 +208,8 @@ last item in second form, etc."""
 allByName : Dict String (Macro io)
 allByName =
     List.foldl
-        (\((Macro { name } _) as macro) acc ->
-            name |> Maybe.map (\n -> Dict.insert n macro acc) |> Maybe.withDefault acc
+        (\({ info } as macro) acc ->
+            info.name |> Maybe.map (\n -> Dict.insert n macro acc) |> Maybe.withDefault acc
         )
         Dict.empty
         all
@@ -221,7 +223,7 @@ macroexpand i (Located loc value) =
                 (Located _ (Symbol name)) :: args ->
                     allByName
                         |> Dict.get name
-                        |> Maybe.map (\(Macro _ expand) -> expand i (Located loc args))
+                        |> Maybe.map (\{ expand } -> expand i (Located loc args))
                         |> Maybe.map (Result.map Expanded)
                         |> Maybe.withDefault (Ok (Returned ( i, Located loc value )))
 

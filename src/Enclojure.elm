@@ -6,6 +6,7 @@ module Enclojure exposing
     , Step
     , continueEval
     , defaultEnv
+    , documentation
     , eval
     , evalPure
     , getEnv
@@ -16,12 +17,25 @@ module Enclojure exposing
     )
 
 import Array exposing (Array)
-import Enclojure.Common exposing (Continuation, Env, Exception(..), IO(..), Number(..), Ref(..), Thunk(..), Value(..))
+import Dict exposing (Dict)
+import Enclojure.Common
+    exposing
+        ( Continuation
+        , Env
+        , Exception(..)
+        , FnInfo
+        , IO(..)
+        , Number(..)
+        , Ref(..)
+        , Thunk(..)
+        , Value(..)
+        )
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Reader
+import Enclojure.Reader.Macros as Macros
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
@@ -121,23 +135,11 @@ evalExpression mutableExpr mutableEnv mutableK =
                 List l ->
                     case l of
                         -- special forms
-                        (Located _ (Symbol "def")) :: args ->
-                            evalDef (Located loc args) env k
-
-                        (Located _ (Symbol "do")) :: exprs ->
-                            evalDo (Located loc exprs) env k
-
-                        (Located _ (Symbol "if")) :: args ->
-                            evalIf (Located loc args) env k
-
-                        (Located _ (Symbol "quote")) :: exprs ->
-                            evalQuote (Located loc exprs) env k
-
-                        (Located _ (Symbol "let")) :: exprs ->
-                            evalLet (Located loc exprs) env k
-
-                        (Located _ (Symbol "fn")) :: exprs ->
-                            evalFn (Located loc exprs) env k
+                        ((Located _ (Symbol name)) as fnExpr) :: argExprs ->
+                            specialFormsByName
+                                |> Dict.get name
+                                |> Maybe.map (\form -> form.eval (Located loc argExprs) env k)
+                                |> Maybe.withDefault (evalApply fnExpr (Located loc argExprs) env k)
 
                         -- apply
                         fnExpr :: argExprs ->
@@ -1125,3 +1127,106 @@ getValue (Located _ ( result, _ )) =
                     _ ->
                         Nothing
             )
+
+
+type alias SpecialForm io =
+    { info : FnInfo, eval : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io }
+
+
+specialForms : List (SpecialForm io)
+specialForms =
+    [ SpecialForm
+        { name = Just "def"
+        , doc = Just """Creates and interns a global var with the name
+of symbol or locates such a var if it already exists.  Then init is evaluated, and the
+root binding of the var is set to the resulting value."""
+        , signatures = [ [ "symbol", "init" ] ]
+        }
+        evalDef
+    , SpecialForm
+        { name = Just "do"
+        , doc = Just """Evaluates the expressions in order and returns the value of
+the last. If no expressions are supplied, returns nil."""
+        , signatures = [ [ "&", "exprs" ] ]
+        }
+        evalDo
+    , SpecialForm
+        { name = Just "if"
+        , doc = Just """Evaluates test. If not the singular values nil or false,
+evaluates and yields then, otherwise, evaluates and yields else. If
+else is not supplied it defaults to nil."""
+        , signatures = [ [ "test", "then", "else?" ] ]
+        }
+        evalIf
+    , SpecialForm
+        { name = Just "quote"
+        , doc = Just "Yields the unevaluated form."
+        , signatures = [ [ "form" ] ]
+        }
+        evalQuote
+    , SpecialForm
+        { name = Just "let"
+        , doc = Just """binding => binding-form init-expr
+binding-form => name, or destructuring-form
+destructuring-form => map-destructure-form, or seq-destructure-form
+
+Evaluates the exprs in a lexical context in which the symbols in
+the binding-forms are bound to their respective init-exprs or parts
+therein."""
+        , signatures = [ [ "[bindings*]", "exprs*" ] ]
+        }
+        evalLet
+    , SpecialForm
+        { name = Just "fn"
+        , doc = Just """params => positional-params*, or positional-params* & rest-param
+positional-param => binding-form
+rest-param => binding-form
+binding-form => name, or destructuring-form
+
+Defines a function."""
+        , signatures =
+            [ [ "name?", "docstring?", "[params*]", "exprs*" ]
+            , [ "name?", "([params*] exprs*)", "+" ]
+            ]
+        }
+        evalFn
+    ]
+
+
+specialFormsByName : Dict String (SpecialForm io)
+specialFormsByName =
+    List.foldl
+        (\({ info } as sf) acc ->
+            info.name |> Maybe.map (\n -> Dict.insert n sf acc) |> Maybe.withDefault acc
+        )
+        Dict.empty
+        specialForms
+
+
+type alias Documentation =
+    { specialForms : List FnInfo
+    , macros : List FnInfo
+    , functions : List FnInfo
+    }
+
+
+documentation : Env io -> Documentation
+documentation env =
+    let
+        functionDocs =
+            env.globalScope
+                |> Dict.foldl
+                    (\name v acc ->
+                        case v of
+                            Fn info _ ->
+                                { info | name = Just name } :: acc
+
+                            _ ->
+                                acc
+                    )
+                    []
+    in
+    { specialForms = specialForms |> List.map .info
+    , macros = Macros.all |> List.map .info
+    , functions = functionDocs
+    }
