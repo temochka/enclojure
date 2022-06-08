@@ -1,7 +1,9 @@
 module Enclojure exposing
-    ( Env
+    ( Doc(..)
+    , Env
     , EvalResult(..)
     , Exception
+    , FnInfo
     , IO
     , Step
     , continueEval
@@ -854,7 +856,7 @@ evalDef (Located loc args) env k =
                     Located loc
                         ( Ok
                             ( Const (Ref (Var name (Located.getValue eret)))
-                            , Runtime.bindLexical name (Located.getValue eret) eenv
+                            , Runtime.bindGlobal name (Located.getValue eret) eenv
                             )
                         , Just (Thunk k)
                         )
@@ -1203,14 +1205,17 @@ specialFormsByName =
         specialForms
 
 
-type alias Documentation =
-    { specialForms : List FnInfo
-    , macros : List FnInfo
-    , functions : List FnInfo
-    }
+type alias FnInfo =
+    Enclojure.Common.FnInfo
 
 
-documentation : Env io -> Documentation
+type Doc
+    = SpecialFormDoc
+    | MacroDoc
+    | FunctionDoc
+
+
+documentation : Env io -> List ( Doc, FnInfo )
 documentation env =
     let
         functionDocs =
@@ -1219,14 +1224,19 @@ documentation env =
                     (\name v acc ->
                         case v of
                             Fn info _ ->
-                                { info | name = Just name } :: acc
+                                ( FunctionDoc, { info | name = Just name } ) :: acc
 
                             _ ->
                                 acc
                     )
                     []
     in
-    { specialForms = specialForms |> List.map .info
-    , macros = Macros.all |> List.map .info
-    , functions = functionDocs
-    }
+    (functionDocs
+        ++ (specialForms
+                |> List.map (.info >> Tuple.pair SpecialFormDoc)
+           )
+        ++ (Macros.all
+                |> List.map (.info >> Tuple.pair MacroDoc)
+           )
+    )
+        |> List.sortBy (Tuple.second >> .name >> Maybe.withDefault "")
