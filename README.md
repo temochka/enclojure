@@ -7,11 +7,11 @@ Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experi
 
 ## Feature highlights
 
-⭐️ **Clojure look'n'feel.** Supports familiar Clojure features: special form syntax, data literals, destructuring. Comes with a subset of functions from `clojure.core` and `clojure.string`.
-⭐️ **BYO side effects.** An Enclojure function can be configured to produce an arbitrary Elm command. This can be used to script the UI or send HTTP requests from scripts.
-⭐️ **Eval doesn’t block the render.** A computation budget can be dedicated to eval on every frame. This allows the app to put the interpreter on hold to handle other events or avoid deadlocks due to programming mistakes
-⭐️ **Synchronous execution model.** Similarly to JVM Clojure (and unlike JavaScript and ClojureScript), all side-effecting functions block the interpreter until the result is available, which leads to simpler programs.
-⭐️ **Written in pure Elm with minimal dependencies.** Can be installed as a package, integrates seamlessly into an existing Elm app.
+- ⭐️ **Clojure look'n'feel.** Supports familiar Clojure features: special form syntax, data literals, destructuring. Comes with a subset of functions from `clojure.core` and `clojure.string`.
+- ⭐️ **BYO side effects.** An Enclojure function can be configured to produce an arbitrary Elm command. This can be used to script the UI or send HTTP requests from scripts.
+- ⭐️ **Eval doesn’t block the render.** A computation budget can be dedicated to eval on every frame. This allows the app to put the interpreter on hold to handle other events or avoid deadlocks due to programming mistakes
+- ⭐️ **Synchronous execution model.** Similarly to JVM Clojure (and unlike JavaScript and ClojureScript), all side-effecting functions block the interpreter until the result is available, which leads to simpler programs.
+- ⭐️ **Written in pure Elm with minimal dependencies.** Can be installed as a package, integrates seamlessly into an existing Elm app.
 
 ## Differences from Clojure
 
