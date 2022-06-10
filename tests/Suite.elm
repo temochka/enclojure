@@ -1323,4 +1323,19 @@ suite =
               """
                 |> expectExceptionWithTrace "\"str\" is not a number" [ "+:3", "a:3", "user:4" ]
             ]
+        , describe "programs"
+            [ """
+              (defn metal?
+                [song-info]
+                (let [{:keys [tags]} song-info]
+                  (some #(string/includes? (string/lower-case %) "metal") tags)))
+
+                (->> [{:artist "Pallbearer" :title "I Saw The End" :tags #{"metal" "doom metal"}}
+                    {:artist "Baroness" :title "Tourniquet" :tags #{"metal" "hard-rock"}}
+                    {:artist "Jakob Bro" :title "Giant" :tags #{"jazz" "scandinavian jazz"}}]
+                    (filter metal?)
+                    count)
+              """
+                |> expectValue (Value.int 2)
+            ]
         ]

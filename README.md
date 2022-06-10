@@ -1,9 +1,24 @@
 # Enclojure
 
-Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experimental software.
+Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experimental software and subject to breaking changes.
 
 * [Elm API](https://package.elm-lang.org/packages/temochka/enclojure/latest/)
 * [Enclojure API](./API.md)
+
+This is what an Enclojure script looks like:
+
+```clojure
+(defn metal?
+  [song-info]
+  (let [{:keys [tags]} song-info]
+    (some #(string/includes? (string/lower-case %) "metal") tags)))
+
+(->> [{:artist "Pallbearer" :title "I Saw The End" :tags #{"metal" "doom metal"}}
+      {:artist "Baroness" :title "Tourniquet" :tags #{"metal" "hard-rock"}}
+      {:artist "Jakob Bro" :title "Giant" :tags #{"jazz" "scandinavian jazz"}}]
+     (filter metal?)
+     count)
+```
 
 ## Feature highlights
 
