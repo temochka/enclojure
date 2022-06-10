@@ -1,22 +1,39 @@
 module Enclojure exposing
-    ( Doc(..)
-    , Env
-    , EvalResult(..)
-    , Exception
-    , FnInfo
-    , IO
-    , Step
-    , continueEval
-    , defaultEnv
-    , documentation
-    , eval
-    , evalPure
-    , getEnv
-    , getValue
-    , init
-    , setEnv
-    , terminate
+    ( Env, init
+    , Exception, evalPure
+    , EvalResult(..), Step, eval, continueEval
+    , getStepEnv, setStepEnv, getStepValue
+    , Doc(..), FnInfo, documentation
     )
+
+{-| Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experimental software and subject to breaking API changes.
+
+
+# Initialize
+
+@docs Env, init
+
+
+# Pure programs
+
+@docs Exception, evalPure
+
+
+# Side-effecting programs
+
+@docs EvalResult, Step, eval, continueEval
+
+
+# Manipulating execution environment
+
+@docs getStepEnv, setStepEnv, getStepValue
+
+
+# Extracting documentation
+
+@docs Doc, FnInfo, documentation
+
+-}
 
 import Array exposing (Array)
 import Dict exposing (Dict)
@@ -45,16 +62,16 @@ import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 import Parser
 
 
+{-| An Enclojure exception value.
+-}
 type alias Exception =
     Enclojure.Common.Exception
 
 
+{-| An execution environment. Think of this as the current state of the interpreter.
+-}
 type alias Env io =
     Enclojure.Common.Env io
-
-
-type alias IO io =
-    Enclojure.Common.IO io
 
 
 resolveSymbol : Env io -> String -> Result Exception (Value io)
@@ -895,11 +912,6 @@ prelude =
         |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw defaultEnv)
 
 
-terminate : Continuation io
-terminate (Located pos v) env =
-    Located pos ( Ok ( Const v, env ), Nothing )
-
-
 defaultEnv : Env io
 defaultEnv =
     Runtime.emptyEnv
@@ -907,11 +919,13 @@ defaultEnv =
         |> LibString.init
 
 
+{-| Initialize a fresh Enclojure execution environment
+-}
 init : Env io
 init =
     prelude
         |> Result.map (Located.unknown >> wrapInDo)
-        |> Result.map (\program -> evalExpression program defaultEnv terminate)
+        |> Result.map (\program -> evalExpression program defaultEnv Runtime.terminate)
         |> Result.andThen (continueEvalPure { maxOps = Nothing })
         |> Result.map (\( _, env ) -> env)
         |> Result.withDefault defaultEnv
@@ -977,6 +991,14 @@ type alias Step io =
     Located (Enclojure.Common.Step io)
 
 
+{-| Returned by `eval`
+
+  - `Done value` - program completed successfully and returned `value`.
+  - `Error exception` - program threw `exception`.
+  - `Continue step` - program reached its `EvalOptions.maxOps` quota and can be resumed with continueEval (perhaps at the next animation frame).
+  - `RunIO io toStep` - program returned a side effect `io` and expects the caller to handle the side effect and call `toStep` with the result.
+
+-}
 type EvalResult io
     = RunIO io (Result Exception (Value io) -> Step io)
     | Continue (Step io)
@@ -984,10 +1006,16 @@ type EvalResult io
     | Done (Value io)
 
 
+{-| Accepted by `eval`, `continueEval`, and `evalPure`. If `EvalOptions.maxOps` is not Nothing, `eval` and `continueEval`
+will return a `Continue step` while `evalPure` will return an error.
+-}
 type alias EvalOptions =
     { maxOps : Maybe Int }
 
 
+{-| Evaluates a given Enclojure program in a provided environment. Returns a tuple of
+the evaluation result and modified environment. May cause an infinite loop if EvalOptions.maxOps is not specified.
+-}
 eval : EvalOptions -> Env io -> String -> ( EvalResult io, Env io )
 eval options initEnv code =
     Reader.parse code
@@ -1006,7 +1034,7 @@ eval options initEnv code =
             (\program ->
                 evalExpression program
                     initEnv
-                    terminate
+                    Runtime.terminate
             )
         |> (\r ->
                 case r of
@@ -1038,6 +1066,10 @@ toPureResult evalResult retEnv =
             Ok ( val, retEnv )
 
 
+{-| Evaluates a given Enclojure program in a provided environment. Returns an error on exception,
+and a tuple of returned value and changed environment on successful execution. Throws if the program attempts
+any side effects. May cause an infinite loop if EvalOptions.maxOps is not specified.
+-}
 evalPure : EvalOptions -> Env io -> String -> Result Exception ( Value io, Env io )
 evalPure options initEnv code =
     let
@@ -1056,6 +1088,8 @@ continueEvalPure options step =
     toPureResult evalResult retEnv
 
 
+{-| Continue evaluation from a previously returned step.
+-}
 continueEval : EvalOptions -> Step io -> ( EvalResult io, Env io )
 continueEval options ((Located loc ( result, thunk )) as step) =
     case result of
@@ -1096,8 +1130,10 @@ continueEval options ((Located loc ( result, thunk )) as step) =
             ( Error e, env )
 
 
-setEnv : Env io -> Step io -> Step io
-setEnv env (Located loc ( result, thunk )) =
+{-| Modify the execution environment of an eval step.
+-}
+setStepEnv : Env io -> Step io -> Step io
+setStepEnv env (Located loc ( result, thunk )) =
     case result of
         Ok ( io, _ ) ->
             Located loc ( Ok ( io, env ), thunk )
@@ -1106,8 +1142,10 @@ setEnv env (Located loc ( result, thunk )) =
             Located loc ( Err ( ex, env ), thunk )
 
 
-getEnv : Step io -> Env io
-getEnv (Located _ ( result, _ )) =
+{-| Get the execution environment of an eval step.
+-}
+getStepEnv : Step io -> Env io
+getStepEnv (Located _ ( result, _ )) =
     case result of
         Ok ( _, env ) ->
             env
@@ -1116,8 +1154,10 @@ getEnv (Located _ ( result, _ )) =
             env
 
 
-getValue : Step io -> Maybe (Value io)
-getValue (Located _ ( result, _ )) =
+{-| Get the value of an eval step unless the step returned a side effect.
+-}
+getStepValue : Step io -> Maybe (Value io)
+getStepValue (Located _ ( result, _ )) =
     result
         |> Result.toMaybe
         |> Maybe.andThen
@@ -1205,6 +1245,8 @@ specialFormsByName =
         specialForms
 
 
+{-| Basic function info: `name`, `doc`, and a list of `signatures`.
+-}
 type alias FnInfo =
     Enclojure.Common.FnInfo
 
@@ -1215,6 +1257,8 @@ type Doc
     | FunctionDoc
 
 
+{-| Returns a list of documentation entries for a given evaluation environment.
+-}
 documentation : Env io -> List ( Doc, FnInfo )
 documentation env =
     let

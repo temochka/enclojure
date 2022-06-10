@@ -13,6 +13,7 @@ module Enclojure.Runtime exposing
     , setCurrentStackFrameLocation
     , sideEffect
     , signatures
+    , terminate
     , throw
     , toFunction
     )
@@ -350,3 +351,8 @@ sideEffect =
 const : Value io -> IO io
 const =
     Const
+
+
+terminate : Continuation io
+terminate (Located pos v) env =
+    Located pos ( Ok ( Const v, env ), Nothing )
