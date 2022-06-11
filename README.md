@@ -1,6 +1,6 @@
 # Enclojure
 
-![](https://github.com/temochka/enclojure/workflows/Test%20Suite/badge.svg)
+[![](https://github.com/temochka/enclojure/workflows/Test%20Suite/badge.svg)](https://github.com/temochka/enclojure/actions/workflows/tests.yml)
 
 Enclojure is a Clojure-like scripting language for Elm apps. Enclojure is experimental software and subject to breaking changes.
 
