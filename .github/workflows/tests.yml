@@ -1,24 +1,22 @@
+# Based on https://github.com/mdgriffith/elm-ui/blob/master/.github/workflows/tests.yml
+# Thank you Matthew Griffith!
+
 name: Test Suite
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
+on: [push]
 
 jobs:
   testing:
     runs-on: ubuntu-latest
 
-    steps:   
+    steps:
     - uses: actions/checkout@v2
-    
+
     - name: Setup node
       uses: actions/setup-node@v1
       with:
         node-version: 10
-        
+
     - uses: actions/cache@v1
       with:
         path: ~/.npm
@@ -27,6 +25,6 @@ jobs:
           ${{ runner.os }}-node-
     - name: Install
       run: npm ci
-    
+
     - name: Elm test suite
       run: npm run test
