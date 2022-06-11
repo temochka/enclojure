@@ -987,6 +987,8 @@ problemToString p =
             "bad repeat"
 
 
+{-| Represents an unfinished computation that can be continued using `continueEval`.
+-}
 type alias Step io =
     Located (Enclojure.Common.Step io)
 
@@ -1251,6 +1253,8 @@ type alias FnInfo =
     Enclojure.Common.FnInfo
 
 
+{-| Represents the type of a documentation entry.
+-}
 type Doc
     = SpecialFormDoc
     | MacroDoc
