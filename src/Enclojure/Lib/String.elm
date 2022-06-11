@@ -1,7 +1,7 @@
 module Enclojure.Lib.String exposing (init)
 
 import Enclojure.Callable as Callable
-import Enclojure.Common as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
+import Enclojure.Common as Common exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value exposing (inspect)
@@ -13,7 +13,7 @@ emptyCallable =
     Callable.new
 
 
-init : Types.Env io -> Types.Env io
+init : Common.Env io -> Common.Env io
 init env =
     [ ( "string/blank?", isBlank )
     , ( "string/capitalize", capitalize )
@@ -37,12 +37,12 @@ init env =
     ]
         |> List.foldl
             (\( name, fn ) ->
-                Runtime.bindGlobal name (Fn { name = Just name, doc = Nothing, signatures = Runtime.signatures fn } (Callable.toThunk fn))
+                Runtime.bindGlobal name (Fn { name = Just name, doc = Nothing, signatures = Callable.signatures fn } (Common.toThunk fn))
             )
             env
 
 
-splitLines : Types.Callable io
+splitLines : Common.Callable io
 splitLines =
     let
         arity1 val =
@@ -50,7 +50,7 @@ splitLines =
                 String s ->
                     String.lines s
                         |> List.map (String >> Located.unknown)
-                        |> Types.List
+                        |> Common.List
                         |> Ok
 
                 _ ->
@@ -62,12 +62,12 @@ splitLines =
     }
 
 
-length : Types.Callable io
+length : Common.Callable io
 length =
     let
         arity1 val =
             Value.tryString val
-                |> Maybe.map (String.length >> Types.Int >> Types.Number >> Ok)
+                |> Maybe.map (String.length >> Common.Int >> Common.Number >> Ok)
                 |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
     { emptyCallable
@@ -76,17 +76,17 @@ length =
     }
 
 
-join : Types.Callable io
+join : Common.Callable io
 join =
     let
         arity1 val =
             val
                 |> Value.trySequenceOf (Value.toString >> Just)
-                |> Maybe.map (String.join "" >> Types.String >> Ok)
+                |> Maybe.map (String.join "" >> Common.String >> Ok)
                 |> Maybe.withDefault (Err (Exception ("type error: expected a sequence, got " ++ inspect val) []))
 
         arity2 ( sepVal, collVal ) =
-            Maybe.map2 (\sep coll -> String.join sep coll |> Types.String |> Ok)
+            Maybe.map2 (\sep coll -> String.join sep coll |> Common.String |> Ok)
                 (Value.tryString sepVal)
                 (Value.trySequenceOf (Value.toString >> Just) collVal)
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
@@ -98,7 +98,7 @@ join =
     }
 
 
-isBlank : Types.Callable io
+isBlank : Common.Callable io
 isBlank =
     let
         arity1 sVal =
@@ -118,7 +118,7 @@ isBlank =
     }
 
 
-capitalize : Types.Callable io
+capitalize : Common.Callable io
 capitalize =
     let
         arity1 value =
@@ -140,7 +140,7 @@ capitalize =
     }
 
 
-endsWith : Types.Callable io
+endsWith : Common.Callable io
 endsWith =
     let
         arity2 ( sValue, substrValue ) =
@@ -155,7 +155,7 @@ endsWith =
     }
 
 
-startsWith : Types.Callable io
+startsWith : Common.Callable io
 startsWith =
     let
         arity2 ( sValue, substrValue ) =
@@ -170,7 +170,7 @@ startsWith =
     }
 
 
-includes : Types.Callable io
+includes : Common.Callable io
 includes =
     let
         arity2 ( sValue, substrValue ) =
@@ -185,7 +185,7 @@ includes =
     }
 
 
-indexOf : Types.Callable io
+indexOf : Common.Callable io
 indexOf =
     let
         arity2 ( sValue, substrValue ) =
@@ -223,7 +223,7 @@ indexOf =
     }
 
 
-lastIndexOf : Types.Callable io
+lastIndexOf : Common.Callable io
 lastIndexOf =
     let
         arity2 ( sValue, substrValue ) =
@@ -263,7 +263,7 @@ lastIndexOf =
     }
 
 
-lowerCase : Types.Callable io
+lowerCase : Common.Callable io
 lowerCase =
     let
         arity1 sValue =
@@ -278,7 +278,7 @@ lowerCase =
     }
 
 
-upperCase : Types.Callable io
+upperCase : Common.Callable io
 upperCase =
     let
         arity1 sValue =
@@ -309,7 +309,7 @@ replaceMatch pattern match =
             pattern
 
 
-replace : Types.Callable io
+replace : Common.Callable io
 replace =
     let
         arity3 ( sValue, matchValue, replacementValue ) =
@@ -356,7 +356,7 @@ Example:
     }
 
 
-replaceFirst : Types.Callable io
+replaceFirst : Common.Callable io
 replaceFirst =
     let
         arity3 ( sValue, matchValue, replacementValue ) =
@@ -404,7 +404,7 @@ Example:
     }
 
 
-reverse : Types.Callable io
+reverse : Common.Callable io
 reverse =
     let
         arity1 sValue =
@@ -419,7 +419,7 @@ reverse =
     }
 
 
-split : Types.Callable io
+split : Common.Callable io
 split =
     let
         arity2 ( sValue, splitstrValue ) =
@@ -441,7 +441,7 @@ Trailing empty strings are not returned - pass limit of -1 to return all."""
     }
 
 
-trim : Types.Callable io
+trim : Common.Callable io
 trim =
     let
         arity1 sValue =
@@ -456,7 +456,7 @@ trim =
     }
 
 
-triml : Types.Callable io
+triml : Common.Callable io
 triml =
     let
         arity1 sValue =
@@ -471,7 +471,7 @@ triml =
     }
 
 
-trimr : Types.Callable io
+trimr : Common.Callable io
 trimr =
     let
         arity1 sValue =

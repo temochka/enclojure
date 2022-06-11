@@ -6,21 +6,19 @@ module Enclojure.Runtime exposing
     , const
     , deref
     , emptyEnv
-    , fetchEnv
-    , isTruthy
+    , fetchGlobal
+    , fetchLexical
     , prettyTrace
     , resetAtom
     , setCurrentStackFrameLocation
     , sideEffect
-    , signatures
     , terminate
     , throw
-    , toFunction
     )
 
 import Dict
-import Enclojure.Callable as Callable exposing (toThunk)
-import Enclojure.Common as Types
+import Enclojure.Callable as Callable
+import Enclojure.Common as Common
     exposing
         ( Arity(..)
         , Callable
@@ -35,7 +33,7 @@ import Enclojure.Common as Types
         , Value(..)
         )
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Value as Value exposing (inspect)
+import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 
@@ -45,6 +43,8 @@ emptyCallable =
     Callable.new
 
 
+{-| Returns an empty environment
+-}
 emptyEnv : Env io
 emptyEnv =
     { globalScope = Dict.empty
@@ -55,16 +55,23 @@ emptyEnv =
     }
 
 
+{-| Binds a given `String` name to `Value io` in the lexical scope of `Env io`
+-}
 bindLexical : String -> Value io -> Env io -> Env io
 bindLexical key value env =
     { env | lexicalScope = Dict.insert key value env.lexicalScope }
 
 
+{-| Binds a given `String` name to `Value io` in the global scope of `Env io`.
+-}
 bindGlobal : String -> Value io -> Env io -> Env io
 bindGlobal key value env =
     { env | globalScope = Dict.insert key value env.globalScope }
 
 
+{-| Adds a new atom containing a provided value to the environment. Returns a tuple of the updated environment and the
+generated atom id.
+-}
 addAtom : Value io -> Env io -> ( Env io, Int )
 addAtom val env =
     let
@@ -80,11 +87,22 @@ addAtom val env =
     ( newEnv, atomId )
 
 
-fetchEnv : String -> Dict.Dict String (Value io) -> Maybe (Value io)
-fetchEnv =
-    Dict.get
+{-| Fetches a value by name from the global scope
+-}
+fetchGlobal : String -> Env io -> Maybe (Value io)
+fetchGlobal name env =
+    Dict.get name env.globalScope
 
 
+{-| Fetches a value by name from the lexical scope
+-}
+fetchLexical : String -> Env io -> Maybe (Value io)
+fetchLexical name env =
+    Dict.get name env.lexicalScope
+
+
+{-| Dereferences given `Ref io` in `Env io`.
+-}
 deref : Ref io -> Env io -> Value io
 deref ref env =
     case ref of
@@ -95,77 +113,11 @@ deref ref env =
             Dict.get atomId env.atoms |> Maybe.withDefault Nil
 
 
+{-| Resets an atom identified by `Int` id to value `Value io` in the given environment `Env io`.
+-}
 resetAtom : Int -> Value io -> Env io -> Env io
 resetAtom atomId val env =
     { env | atoms = Dict.insert atomId val env.atoms }
-
-
-signatures : Callable io -> List (List String)
-signatures callable =
-    [ callable.arity0 |> Maybe.map (always [])
-    , callable.arity1
-        |> Maybe.map
-            (\arity ->
-                case arity of
-                    Fixed v _ ->
-                        [ inspect v ]
-
-                    Variadic { argNames, restArgName } _ ->
-                        [ inspect argNames, "&", inspect restArgName ]
-            )
-    , callable.arity2
-        |> Maybe.map
-            (\arity ->
-                case arity of
-                    Fixed ( a, b ) _ ->
-                        [ inspect a, inspect b ]
-
-                    Variadic { argNames, restArgName } _ ->
-                        let
-                            ( a, b ) =
-                                argNames
-                        in
-                        [ inspect a, inspect b, "& " ++ inspect restArgName ]
-            )
-    , callable.arity3
-        |> Maybe.map
-            (\arity ->
-                case arity of
-                    Fixed ( a, b, c ) _ ->
-                        [ inspect a, inspect b, inspect c ]
-
-                    Variadic { argNames, restArgName } _ ->
-                        let
-                            ( a, b, c ) =
-                                argNames
-                        in
-                        [ inspect a, inspect b, inspect c, "&", inspect restArgName ]
-            )
-    ]
-        |> List.filterMap identity
-
-
-isTruthy : Value io -> Bool
-isTruthy val =
-    case val of
-        Nil ->
-            False
-
-        Bool False ->
-            False
-
-        _ ->
-            True
-
-
-toFunction : (a -> Result Exception (IO io)) -> (a -> Env io -> Continuation io -> Step io)
-toFunction fn =
-    \v env k ->
-        ( fn v
-            |> Result.map (\io -> ( io, env ))
-            |> Result.mapError (\err -> ( setStackTrace env.stack err, env ))
-        , Just (Thunk k)
-        )
 
 
 getFn : String -> Callable io
@@ -195,8 +147,8 @@ getFn key =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity1 = Just <| Fixed (Symbol "coll") <| toFunction (arity1 >> Const >> Ok)
-        , arity2 = Just <| Fixed ( Symbol "coll", Symbol "not-found" ) <| toFunction (arity2 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "coll") <| Callable.toArityFunction (arity1 >> Const >> Ok)
+        , arity2 = Just <| Fixed ( Symbol "coll", Symbol "not-found" ) <| Callable.toArityFunction (arity2 >> Const >> Ok)
     }
 
 
@@ -211,7 +163,7 @@ setLookupFn set =
                 Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed (Symbol "x") <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "x") <| Callable.toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -222,10 +174,12 @@ mapLookupFn map =
             ValueMap.get val map |> Maybe.map Located.getValue |> Maybe.withDefault Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed (Symbol "key") <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed (Symbol "key") <| Callable.toArityFunction (arity1 >> Const >> Ok)
     }
 
 
+{-| Attempts to interpret the first argument as a function and the second argument as a list of its arguments.
+-}
 apply : Located (Value io) -> Located (Value io) -> Env io -> Continuation io -> Located (Step io)
 apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
     let
@@ -264,7 +218,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (getFn key) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (Common.toThunk (getFn key) { self = fnExpr, k = k }) )
                 |> Located.sameAs arg
 
         Map map ->
@@ -278,7 +232,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (mapLookupFn map) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (Common.toThunk (mapLookupFn map) { self = fnExpr, k = k }) )
                 |> Located.sameAs arg
 
         Set set ->
@@ -292,7 +246,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (setLookupFn set) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (Common.toThunk (setLookupFn set) { self = fnExpr, k = k }) )
                 |> Located.sameAs arg
 
         _ ->
@@ -305,11 +259,13 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                 |> Located fnLoc
 
 
-setStackTrace : List Types.StackFrame -> Exception -> Exception
+setStackTrace : List Common.StackFrame -> Exception -> Exception
 setStackTrace stack (Exception msg _) =
     Exception msg stack
 
 
+{-| Overwrites the location of the current stack frame in a given environment.
+-}
 setCurrentStackFrameLocation : Located.Location -> Env io -> Env io
 setCurrentStackFrameLocation location env =
     let
@@ -322,6 +278,8 @@ setCurrentStackFrameLocation location env =
     { env | stack = newStack }
 
 
+{-| Return a "prettified" stack trace for an exception.
+-}
 prettyTrace : Exception -> List String
 prettyTrace (Exception _ trace) =
     trace
@@ -338,21 +296,29 @@ prettyTrace (Exception _ trace) =
             )
 
 
+{-| Assigns the stack from the given environment to the exception.
+-}
 throw : Env io -> Exception -> Exception
 throw env (Exception msg _) =
     Exception msg env.stack
 
 
+{-| Indicates that the returned value is a side effect.
+-}
 sideEffect : io -> IO io
 sideEffect =
     SideEffect
 
 
+{-| Indicates that the returned value is a constant.
+-}
 const : Value io -> IO io
 const =
     Const
 
 
+{-| Returns a continuation that terminates the program.
+-}
 terminate : Continuation io
 terminate (Located pos v) env =
     Located pos ( Ok ( Const v, env ), Nothing )

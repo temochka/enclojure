@@ -6,20 +6,46 @@ module Enclojure.Callable exposing
     , setArity1
     , setArity2
     , setArity3
+    , signatures
     , toArityFunction
-    , toThunk
     , variadicArity
     )
 
+{-| Helper functions for defining Enclojure callables.
+
+
+# Getting started
+
+@doc Callable, new
+
+
+# Fleshing out your callable
+
+Unlike Elm, one Enclojure function can have more than one "arity": the number of arguments it accepts. Arities can be
+fixed (positional arguments only) or variadic (some or no positional arguments + a list of remaining arguments).
+
+@doc fixedArity, variadicArity, setArity0, setArity1, setArity2, setArity3
+
+
+# Misc
+
+@doc signatures
+
+-}
+
 import Enclojure.Common exposing (Arity(..), Continuation, Env, Exception(..), IO, Step, Thunk(..), Value(..))
-import Enclojure.Extra.Maybe
-import Enclojure.Located as Located exposing (Located(..))
+import Enclojure.Located exposing (Located(..))
+import Enclojure.Value exposing (inspect)
 
 
+{-| Represents a callable (anonymous function).
+-}
 type alias Callable io =
     Enclojure.Common.Callable io
 
 
+{-| Creates a new empty callable.
+-}
 new : Callable io
 new =
     { doc = Nothing
@@ -30,6 +56,12 @@ new =
     }
 
 
+{-| Converts a simplified arity to full arity.
+
+Most Enclojure callables don’t need to modify the environment or to access the continuation.
+Thus, it's easier to define them as functions of `a -> Result Exception (IO io)`.
+
+-}
 toArityFunction : (a -> Result Exception (IO io)) -> (a -> Env io -> Continuation io -> Step io)
 toArityFunction fn =
     \v env k ->
@@ -40,171 +72,90 @@ toArityFunction fn =
         )
 
 
+{-| Overwrite the arity 0 (no positional arguments) on a callable.
+-}
 setArity0 : Enclojure.Common.Arity io () -> Callable io -> Callable io
 setArity0 arity callable =
     { callable | arity0 = Just arity }
 
 
+{-| Overwrite the arity 1 (one positional argument) on a callable
+-}
 setArity1 : Enclojure.Common.Arity io (Value io) -> Callable io -> Callable io
 setArity1 arity callable =
     { callable | arity1 = Just arity }
 
 
+{-| Overwrite the arity 2 (two positional arguments) on a callable
+-}
 setArity2 : Enclojure.Common.Arity io ( Value io, Value io ) -> Callable io -> Callable io
 setArity2 arity callable =
     { callable | arity2 = Just arity }
 
 
+{-| Overwrite the arity 3 (three positional arguments) on a callable
+-}
 setArity3 : Enclojure.Common.Arity io ( Value io, Value io, Value io ) -> Callable io -> Callable io
 setArity3 arity callable =
     { callable | arity3 = Just arity }
 
 
+{-| Build an arity that accepts positional args `a` and doesn’t accept any varargs.
+-}
 fixedArity : a -> (a -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
 fixedArity signature fn =
     Enclojure.Common.Fixed signature <| toArityFunction fn
 
 
+{-| Build an arity that accepts positional args `a` and varargs.
+-}
 variadicArity : { argNames : a, restArgName : Value io } -> ({ args : a, rest : List (Value io) } -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
 variadicArity signature fn =
     Enclojure.Common.Variadic signature <| toArityFunction fn
 
 
-toThunk : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
-toThunk callable { k } =
-    Thunk
-        (\(Located pos arg) env ->
-            case arg of
-                List args ->
-                    dispatch callable (List.map Located.getValue args) env k
-                        |> Located pos
+{-| Returns the list of signatures of a given callable.
+-}
+signatures : Callable io -> List (List String)
+signatures callable =
+    [ callable.arity0 |> Maybe.map (always [])
+    , callable.arity1
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed v _ ->
+                        [ inspect v ]
 
-                _ ->
-                    Located pos ( Err ( Exception "Foo" env.stack, env ), Nothing )
-        )
-
-
-dispatch : Callable io -> List (Value io) -> Env io -> Continuation io -> Step io
-dispatch callable args env k =
-    case args of
-        [] ->
-            callable.arity0
-                |> Maybe.map
-                    (\arity0 ->
-                        case arity0 of
-                            Fixed _ fn ->
-                                fn () env k
-
-                            Variadic _ fn ->
-                                fn { args = (), rest = [] } env k
-                    )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 0" env.stack, env ), Just (Thunk k) )
-
-        [ a0 ] ->
-            extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        callable.arity1
-                            |> Maybe.map
-                                (\arity1 ->
-                                    case arity1 of
-                                        Fixed _ fn ->
-                                            fn a0 env k
-
-                                        Variadic _ fn ->
-                                            fn { args = a0, rest = [] } env k
-                                )
-                    )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 1" env.stack, env ), Just (Thunk k) )
-
-        [ a0, a1 ] ->
-            extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1 ] } env k)
-                    )
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        callable.arity2
-                            |> Maybe.map
-                                (\arity2 ->
-                                    case arity2 of
-                                        Fixed _ fn ->
-                                            fn ( a0, a1 ) env k
-
-                                        Variadic _ fn ->
-                                            fn { args = ( a0, a1 ), rest = [] } env k
-                                )
-                    )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 2" env.stack, env ), Just (Thunk k) )
-
-        [ a0, a1, a2 ] ->
-            extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1, a2 ] } env k)
-                    )
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity2
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = [ a2 ] } env k)
-                    )
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        callable.arity3
-                            |> Maybe.map
-                                (\arity3 ->
-                                    case arity3 of
-                                        Fixed _ fn ->
-                                            fn ( a0, a1, a2 ) env k
-
-                                        Variadic _ fn ->
-                                            fn { args = ( a0, a1, a2 ), rest = [] } env k
-                                )
-                    )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 3" env.stack, env ), Just (Thunk k) )
-
-        a0 :: a1 :: a2 :: rest ->
-            extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = a1 :: a2 :: rest } env k)
-                    )
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity2
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = a2 :: rest } env k)
-                    )
-                |> Enclojure.Extra.Maybe.orElse
-                    (\_ ->
-                        extractVariadic callable.arity3
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
-                    )
-                |> Maybe.withDefault
-                    ( Err
-                        ( Exception ("Invalid arity " ++ String.fromInt (List.length args)) env.stack
-                        , env
-                        )
-                    , Nothing
-                    )
-
-
-extractVariadic : Maybe (Arity io a) -> Maybe ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> Step io)
-extractVariadic arity =
-    arity
-        |> Maybe.andThen
-            (\a ->
-                case a of
-                    Fixed _ _ ->
-                        Nothing
-
-                    Variadic _ fn ->
-                        Just fn
+                    Variadic { argNames, restArgName } _ ->
+                        [ inspect argNames, "&", inspect restArgName ]
             )
+    , callable.arity2
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed ( a, b ) _ ->
+                        [ inspect a, inspect b ]
+
+                    Variadic { argNames, restArgName } _ ->
+                        let
+                            ( a, b ) =
+                                argNames
+                        in
+                        [ inspect a, inspect b, "& " ++ inspect restArgName ]
+            )
+    , callable.arity3
+        |> Maybe.map
+            (\arity ->
+                case arity of
+                    Fixed ( a, b, c ) _ ->
+                        [ inspect a, inspect b, inspect c ]
+
+                    Variadic { argNames, restArgName } _ ->
+                        let
+                            ( a, b, c ) =
+                                argNames
+                        in
+                        [ inspect a, inspect b, inspect c, "&", inspect restArgName ]
+            )
+    ]
+        |> List.filterMap identity

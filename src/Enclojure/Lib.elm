@@ -2,7 +2,7 @@ module Enclojure.Lib exposing (init, prelude)
 
 import Array
 import Enclojure.Callable as Callable exposing (toArityFunction)
-import Enclojure.Common
+import Enclojure.Common as Common
     exposing
         ( Arity(..)
         , Callable
@@ -96,7 +96,7 @@ init env =
     ]
         |> List.foldl
             (\( name, fn ) aEnv ->
-                Runtime.bindGlobal name (Fn { name = Just name, doc = fn.doc, signatures = Runtime.signatures fn } (Callable.toThunk fn)) aEnv
+                Runtime.bindGlobal name (Fn { name = Just name, doc = fn.doc, signatures = Callable.signatures fn } (Common.toThunk fn)) aEnv
             )
             env
 
@@ -230,7 +230,7 @@ not_ : Callable io
 not_ =
     let
         arity1 val =
-            Ok (Const (Bool (not (Runtime.isTruthy val))))
+            Ok (Const (Bool (not (Value.isTruthy val))))
     in
     { emptyCallable
         | arity1 = Just (Fixed (Symbol "x") (toArityFunction arity1))

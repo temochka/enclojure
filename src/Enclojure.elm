@@ -76,8 +76,8 @@ type alias Env io =
 
 resolveSymbol : Env io -> String -> Result Exception (Value io)
 resolveSymbol env symbol =
-    Runtime.fetchEnv symbol env.lexicalScope
-        |> orElse (\_ -> Runtime.fetchEnv symbol env.globalScope)
+    Runtime.fetchLexical symbol env
+        |> orElse (\_ -> Runtime.fetchGlobal symbol env)
         |> Result.fromMaybe (Value.exception ("Unknown symbol " ++ symbol) |> Runtime.throw env)
 
 
@@ -832,7 +832,7 @@ evalIf (Located loc args) env k =
             evalExpression eIf
                 env
                 (\ifRet ifEnv ->
-                    if Runtime.isTruthy (Located.getValue ifRet) then
+                    if Value.isTruthy (Located.getValue ifRet) then
                         evalExpression eThen ifEnv k
 
                     else
@@ -843,7 +843,7 @@ evalIf (Located loc args) env k =
             evalExpression eIf
                 env
                 (\ifRet ifEnv ->
-                    if Runtime.isTruthy (Located.getValue ifRet) then
+                    if Value.isTruthy (Located.getValue ifRet) then
                         evalExpression eThen ifEnv k
 
                     else

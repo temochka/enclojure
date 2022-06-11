@@ -17,10 +17,12 @@ module Enclojure.Common exposing
     , ValueSet(..)
     , areEqualValues
     , linearFind
+    , toThunk
     )
 
 import Array exposing (Array)
 import Dict exposing (Dict)
+import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
 import Regex exposing (Regex)
 import Set
@@ -284,3 +286,143 @@ linearFind f l =
 
             else
                 linearFind f rest
+
+
+extractVariadic : Maybe (Arity io a) -> Maybe ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> Step io)
+extractVariadic arity =
+    arity
+        |> Maybe.andThen
+            (\a ->
+                case a of
+                    Fixed _ _ ->
+                        Nothing
+
+                    Variadic _ fn ->
+                        Just fn
+            )
+
+
+dispatch : Callable io -> List (Value io) -> Env io -> Continuation io -> Step io
+dispatch callable args env k =
+    case args of
+        [] ->
+            callable.arity0
+                |> Maybe.map
+                    (\arity0 ->
+                        case arity0 of
+                            Fixed _ fn ->
+                                fn () env k
+
+                            Variadic _ fn ->
+                                fn { args = (), rest = [] } env k
+                    )
+                |> Maybe.withDefault ( Err ( Exception "Invalid arity 0" env.stack, env ), Just (Thunk k) )
+
+        [ a0 ] ->
+            extractVariadic callable.arity0
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        callable.arity1
+                            |> Maybe.map
+                                (\arity1 ->
+                                    case arity1 of
+                                        Fixed _ fn ->
+                                            fn a0 env k
+
+                                        Variadic _ fn ->
+                                            fn { args = a0, rest = [] } env k
+                                )
+                    )
+                |> Maybe.withDefault ( Err ( Exception "Invalid arity 1" env.stack, env ), Just (Thunk k) )
+
+        [ a0, a1 ] ->
+            extractVariadic callable.arity0
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity1
+                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1 ] } env k)
+                    )
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        callable.arity2
+                            |> Maybe.map
+                                (\arity2 ->
+                                    case arity2 of
+                                        Fixed _ fn ->
+                                            fn ( a0, a1 ) env k
+
+                                        Variadic _ fn ->
+                                            fn { args = ( a0, a1 ), rest = [] } env k
+                                )
+                    )
+                |> Maybe.withDefault ( Err ( Exception "Invalid arity 2" env.stack, env ), Just (Thunk k) )
+
+        [ a0, a1, a2 ] ->
+            extractVariadic callable.arity0
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity1
+                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1, a2 ] } env k)
+                    )
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity2
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = [ a2 ] } env k)
+                    )
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        callable.arity3
+                            |> Maybe.map
+                                (\arity3 ->
+                                    case arity3 of
+                                        Fixed _ fn ->
+                                            fn ( a0, a1, a2 ) env k
+
+                                        Variadic _ fn ->
+                                            fn { args = ( a0, a1, a2 ), rest = [] } env k
+                                )
+                    )
+                |> Maybe.withDefault ( Err ( Exception "Invalid arity 3" env.stack, env ), Just (Thunk k) )
+
+        a0 :: a1 :: a2 :: rest ->
+            extractVariadic callable.arity0
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity1
+                            |> Maybe.map (\fn -> fn { args = a0, rest = a1 :: a2 :: rest } env k)
+                    )
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity2
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = a2 :: rest } env k)
+                    )
+                |> Enclojure.Extra.Maybe.orElse
+                    (\_ ->
+                        extractVariadic callable.arity3
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
+                    )
+                |> Maybe.withDefault
+                    ( Err
+                        ( Exception ("Invalid arity " ++ String.fromInt (List.length args)) env.stack
+                        , env
+                        )
+                    , Nothing
+                    )
+
+
+toThunk : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
+toThunk callable { k } =
+    Thunk
+        (\(Located pos arg) env ->
+            case arg of
+                List args ->
+                    dispatch callable (List.map Located.getValue args) env k
+                        |> Located pos
+
+                _ ->
+                    Located pos ( Err ( Exception "Foo" env.stack, env ), Nothing )
+        )
