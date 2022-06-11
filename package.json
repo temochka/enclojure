@@ -1,0 +1,27 @@
+{
+  "name": "enclojure-testing",
+  "version": "1.0.0",
+  "description": "Enclojure test suite",
+  "main": "index.js",
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "elm-test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/temochka/enclojure.git"
+  },
+  "author": "Artem Chistyakov",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/temochka/enclojure/issues"
+  },
+  "homepage": "https://github.com/temochka/enclojure#readme",
+  "dependencies": {
+    "elm": "^0.19.1-5",
+    "elm-test": "^0.19.1-revision7"
+  }
+}
