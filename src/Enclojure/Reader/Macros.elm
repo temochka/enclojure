@@ -71,7 +71,12 @@ type alias Macro io =
 
 all : List (Macro io)
 all =
-    [ Macro { name = Just "__lambda", doc = Just "", signatures = [] } expandLambda
+    [ Macro
+        { name = Just "__lambda"
+        , doc = Just "Inserted by the reader in place of #()."
+        , signatures = []
+        }
+        expandLambda
     , Macro
         { name = Just "and"
         , doc = Just """Evaluates exprs one at a time, from left to right. If a form
