@@ -3,8 +3,7 @@ module Enclojure.Value exposing
     , inspect, inspectLocated, inspectType, isEqual, isTruthy
     , toMap, toSeq, toString
     , exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
-    , tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef
-    , tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
+    , tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
     )
 
 {-| Functions for working with Enclojure values and translating between Elm and Enclojure types.
@@ -32,7 +31,7 @@ module Enclojure.Value exposing
 
 # Decoding values
 
-@docs tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex trySequenceOf tryString trySymbol tryVector tryVectorOf
+@docs tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
 
 -}
 

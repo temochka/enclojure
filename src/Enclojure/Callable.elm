@@ -1,8 +1,7 @@
 module Enclojure.Callable exposing
     ( Callable, new
-    , fixedArity, variadicArity, setArity0, setArity1, setArity2, setArity3
+    , fixedArity, variadicArity, toArityFunction, setArity0, setArity1, setArity2, setArity3
     , signatures
-    , toArityFunction
     )
 
 {-| Helper functions for defining Enclojure callables.
@@ -18,7 +17,7 @@ module Enclojure.Callable exposing
 Unlike Elm, one Enclojure function can have more than one "arity": the number of arguments it accepts. Arities can be
 fixed (positional arguments only) or variadic (some or no positional arguments + a list of remaining arguments).
 
-@docs fixedArity, variadicArity, setArity0, setArity1, setArity2, setArity3
+@docs fixedArity, variadicArity, toArityFunction, setArity0, setArity1, setArity2, setArity3
 
 
 # Misc
