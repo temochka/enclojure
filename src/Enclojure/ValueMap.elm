@@ -1,49 +1,74 @@
 module Enclojure.ValueMap exposing
-    ( ValueMap
-    , ValueMapEntry
-    , empty
-    , foldl
-    , fromList
-    , get
-    , insert
-    , isEmpty
-    , keys
-    , map
-    , member
-    , remove
-    , toList
-    , values
+    ( ValueMap, ValueMapEntry, empty, fromList
+    , get, keys, values, toList
+    , foldl, insert, map, remove
+    , isEmpty, member
     )
 
+{-| All Enclojure maps are backed by `ValueMap io` type. This namespace provides functions for working with this type.
+
+
+# Creating
+
+@docs ValueMap, ValueMapEntry, empty, fromList
+
+
+# Accessing values
+
+@docs get, keys, values, toList
+
+
+# Modifying
+
+@docs foldl, insert, map, remove
+
+
+# Predicates
+
+@docs isEmpty, member
+
+-}
+
 import Dict
-import Enclojure.Common exposing (Number(..), Value(..), ValueMap, ValueMapEntry, areEqualValues, linearFind)
+import Enclojure.Common exposing (Number(..), Value(..), ValueMap(..), ValueMapEntry, areEqualValues, linearFind)
 import Enclojure.Located as Located exposing (Located(..))
 
 
+{-| Represents a map of values to located values. Operation complexity depends on the type of the key.
+For keywords, symbols, strings, floats, and integers, the complexity of insert/remove operations is logarithmic.
+For other value types, the complexity ranges from linear or worse, depending on the type of key values.
+-}
 type alias ValueMap io =
     Enclojure.Common.ValueMap io
 
 
+{-| Represents a map entry.
+-}
 type alias ValueMapEntry io =
     Enclojure.Common.ValueMapEntry io
 
 
+{-| Returns an empty map.
+-}
 empty : ValueMap io
 empty =
-    { ints = Dict.empty
-    , floats = Dict.empty
-    , strings = Dict.empty
-    , nil = Nothing
-    , true = Nothing
-    , false = Nothing
-    , symbols = Dict.empty
-    , keywords = Dict.empty
-    , otherValues = []
-    }
+    ValueMap
+        { ints = Dict.empty
+        , floats = Dict.empty
+        , strings = Dict.empty
+        , nil = Nothing
+        , true = Nothing
+        , false = Nothing
+        , symbols = Dict.empty
+        , keywords = Dict.empty
+        , otherValues = []
+        }
 
 
+{-| Returns True if the map is empty.
+-}
 isEmpty : ValueMap io -> Bool
-isEmpty m =
+isEmpty (ValueMap m) =
     Dict.isEmpty m.ints
         && Dict.isEmpty m.floats
         && Dict.isEmpty m.strings
@@ -72,9 +97,11 @@ insertOtherValue k v list =
             [ ( k, v ) ]
 
 
+{-| Inserts a located value specified by the second argument to the key specified by the first argument.
+-}
 insert : Value io -> Located (Value io) -> ValueMap io -> ValueMap io
-insert k v m =
-    case k of
+insert k v (ValueMap m) =
+    (case k of
         Number (Int int) ->
             { m | ints = Dict.insert int v m.ints }
 
@@ -101,11 +128,15 @@ insert k v m =
 
         _ ->
             { m | otherValues = insertOtherValue k v m.otherValues }
+    )
+        |> ValueMap
 
 
+{-| Removes the value at a given key from the map.
+-}
 remove : Value io -> ValueMap io -> ValueMap io
-remove k m =
-    case k of
+remove k (ValueMap m) =
+    (case k of
         Number (Int int) ->
             { m | ints = Dict.remove int m.ints }
 
@@ -132,10 +163,14 @@ remove k m =
 
         _ ->
             { m | otherValues = m.otherValues |> List.filter (Tuple.first >> areEqualValues k >> not) }
+    )
+        |> ValueMap
 
 
+{-| Returns the located value at a given key in the map if present.
+-}
 get : Value io -> ValueMap io -> Maybe (Located (Value io))
-get k m =
+get k (ValueMap m) =
     case k of
         Number (Int int) ->
             Dict.get int m.ints
@@ -166,13 +201,17 @@ get k m =
                 |> Maybe.map Tuple.second
 
 
+{-| Returns True if the map has a value at a given key.
+-}
 member : Value io -> ValueMap io -> Bool
-member val m =
-    Nothing /= get val m
+member keyVal m =
+    Nothing /= get keyVal m
 
 
-toList : ValueMap io -> List ( Value io, Located (Value io) )
-toList m =
+{-| Transforms a given map into a list of map entries.
+-}
+toList : ValueMap io -> List (ValueMapEntry io)
+toList (ValueMap m) =
     let
         ints =
             Dict.toList m.ints |> List.map (Tuple.mapFirst (Int >> Number))
@@ -209,27 +248,38 @@ toList m =
         ++ m.otherValues
 
 
+{-| Folds a given map from left to right using a function that accepts the key, the located value, and the accumulator,
+and is called for each entry in the map.
+-}
 foldl : (Value io -> Located (Value io) -> a -> a) -> a -> ValueMap io -> a
 foldl fn init m =
     List.foldl (\( k, v ) a -> fn k v a) init (toList m)
 
 
+{-| Creates a map from a given list of map entries.
+-}
 fromList : List (ValueMapEntry io) -> ValueMap io
 fromList entries =
     entries
         |> List.foldl (\( k, v ) a -> insert k v a) empty
 
 
+{-| Applies a function to every mapEntry in the map.
+-}
 map : (ValueMapEntry io -> ValueMapEntry io) -> ValueMap io -> ValueMap io
 map f m =
     m |> toList |> List.map f |> fromList
 
 
+{-| Returns the list of map values without their source code locations.
+-}
 values : ValueMap io -> List (Value io)
 values m =
     m |> toList |> List.map (Tuple.second >> Located.getValue)
 
 
+{-| Returns the list of map keys.
+-}
 keys : ValueMap io -> List (Value io)
 keys m =
     m |> toList |> List.map Tuple.first

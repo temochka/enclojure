@@ -1,16 +1,51 @@
-module Enclojure.ValueSet exposing (ValueSet, empty, fromList, insert, isEmpty, map, member, remove, toList)
+module Enclojure.ValueSet exposing
+    ( ValueSet, empty, fromList
+    , toList
+    , insert, map, remove
+    , isEmpty, member
+    )
 
-import Enclojure.Common exposing (Number(..), Value(..), areEqualValues)
+{-| Represents a set of values. Operation complexity depends on the type of the value.
+For keywords, symbols, strings, floats, and integers, the complexity of insert/remove operations is logarithmic.
+For other value types, the complexity is typically linear or worse, depending on the type of key values.
+
+
+# Creating
+
+@docs ValueSet, empty, fromList
+
+
+# Accessing values
+
+@docs toList
+
+
+# Modifying
+
+@docs insert, map, remove
+
+
+# Predicates
+
+@docs isEmpty, member
+
+-}
+
+import Enclojure.Common exposing (Number(..), Value(..), ValueSet(..), areEqualValues)
 import Set
 
 
+{-| Represents a set of values.
+-}
 type alias ValueSet io =
     Enclojure.Common.ValueSet io
 
 
+{-| Returns an empty set.
+-}
 empty : ValueSet io
 empty =
-    Enclojure.Common.ValueSet
+    ValueSet
         { ints = Set.empty
         , floats = Set.empty
         , strings = Set.empty
@@ -23,6 +58,8 @@ empty =
         }
 
 
+{-| Returns True if the set is empty.
+-}
 isEmpty : ValueSet io -> Bool
 isEmpty (Enclojure.Common.ValueSet m) =
     Set.isEmpty m.ints
@@ -53,6 +90,8 @@ insertOtherValue v list =
             [ v ]
 
 
+{-| Inserts a value into the set.
+-}
 insert : Value io -> ValueSet io -> ValueSet io
 insert v (Enclojure.Common.ValueSet set) =
     Enclojure.Common.ValueSet <|
@@ -85,6 +124,8 @@ insert v (Enclojure.Common.ValueSet set) =
                 { set | otherValues = insertOtherValue v set.otherValues }
 
 
+{-| Removes a value from the set or does nothing if it's not present.
+-}
 remove : Value io -> ValueSet io -> ValueSet io
 remove v (Enclojure.Common.ValueSet set) =
     Enclojure.Common.ValueSet <|
@@ -117,12 +158,16 @@ remove v (Enclojure.Common.ValueSet set) =
                 { set | otherValues = set.otherValues |> List.filter (areEqualValues v >> not) }
 
 
+{-| Creates a new set from a list of values.
+-}
 fromList : List (Value io) -> ValueSet io
 fromList entries =
     entries
         |> List.foldl (\v a -> insert v a) empty
 
 
+{-| Returns a list of values in the set.
+-}
 toList : ValueSet io -> List (Value io)
 toList (Enclojure.Common.ValueSet set) =
     let
@@ -173,11 +218,15 @@ toList (Enclojure.Common.ValueSet set) =
         ++ set.otherValues
 
 
+{-| Applies a given function to each value in the set.
+-}
 map : (Value io -> Value io) -> ValueSet io -> ValueSet io
 map f set =
     set |> toList |> List.map f |> fromList
 
 
+{-| Returns True if a given value is in the set.
+-}
 member : Value io -> ValueSet io -> Bool
 member v (Enclojure.Common.ValueSet set) =
     case v of

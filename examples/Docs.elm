@@ -10,6 +10,7 @@ import File.Download
 import Html
 
 
+
 type alias Model =
     { query : String
     , docs : List ( Enclojure.Doc, Enclojure.FnInfo )

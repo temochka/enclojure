@@ -1,17 +1,27 @@
 module Enclojure.Located exposing
-    ( Located(..)
-    , Location(..)
-    , at
-    , getLocation
-    , getOffsets
-    , getValue
-    , map
-    , sameAs
-    , unknown
+    ( Located(..), Location(..), Offsets
+    , at, getValue, map, sameAs, unknown
+    , getLocation, getOffsets
     )
 
 {-| Some values have known locations in the evaluated source code. This module provides functions for
 working with them.
+
+
+# Types
+
+@docs Located, Location, Offsets
+
+
+# Working with located values
+
+@docs at, getValue, map, sameAs, unknown
+
+
+# Extracting location information
+
+@docs getLocation, getOffsets
+
 -}
 
 

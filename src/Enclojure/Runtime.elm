@@ -1,20 +1,39 @@
 module Enclojure.Runtime exposing
-    ( addAtom
-    , apply
-    , bindGlobal
-    , bindLexical
-    , const
-    , deref
-    , emptyEnv
-    , fetchGlobal
-    , fetchLexical
-    , prettyTrace
-    , resetAtom
-    , setCurrentStackFrameLocation
-    , sideEffect
-    , terminate
-    , throw
+    ( emptyEnv, bindGlobal, bindLexical, fetchGlobal, fetchLexical, setCurrentStackFrameLocation
+    , prettyTrace, throw
+    , const, sideEffect
+    , addAtom, deref, resetAtom
+    , apply, terminate
     )
+
+{-| Advanced functions for working with Enclojure runtime.
+
+
+# Environment
+
+@docs emptyEnv, bindGlobal, bindLexical, fetchGlobal, fetchLexical, setCurrentStackFrameLocation
+
+
+# Exceptions
+
+@docs prettyTrace, throw
+
+
+# I/O
+
+@docs const, sideEffect
+
+
+# References
+
+@docs addAtom, deref, resetAtom
+
+
+# Misc
+
+@docs apply, terminate
+
+-}
 
 import Dict
 import Enclojure.Callable as Callable

@@ -12,7 +12,7 @@ module Enclojure.Common exposing
     , Step
     , Thunk(..)
     , Value(..)
-    , ValueMap
+    , ValueMap(..)
     , ValueMapEntry
     , ValueSet(..)
     , areEqualValues
@@ -67,17 +67,18 @@ type alias ValueMapEntry io =
     ( Value io, Located (Value io) )
 
 
-type alias ValueMap io =
-    { ints : Dict Int (Located (Value io))
-    , floats : Dict Float (Located (Value io))
-    , strings : Dict String (Located (Value io))
-    , keywords : Dict String (Located (Value io))
-    , symbols : Dict String (Located (Value io))
-    , nil : Maybe (Located (Value io))
-    , true : Maybe (Located (Value io))
-    , false : Maybe (Located (Value io))
-    , otherValues : List ( Value io, Located (Value io) )
-    }
+type ValueMap io
+    = ValueMap
+        { ints : Dict Int (Located (Value io))
+        , floats : Dict Float (Located (Value io))
+        , strings : Dict String (Located (Value io))
+        , keywords : Dict String (Located (Value io))
+        , symbols : Dict String (Located (Value io))
+        , nil : Maybe (Located (Value io))
+        , true : Maybe (Located (Value io))
+        , false : Maybe (Located (Value io))
+        , otherValues : List ( Value io, Located (Value io) )
+        }
 
 
 type ValueSet io
@@ -196,7 +197,7 @@ areEqualDictEntries f a b =
 
 
 areEqualMaps : ValueMap io -> ValueMap io -> Bool
-areEqualMaps a b =
+areEqualMaps (ValueMap a) (ValueMap b) =
     a
         == b
         || (areEqualDictEntries (Int >> Number) (Dict.toList a.ints) (Dict.toList b.ints)

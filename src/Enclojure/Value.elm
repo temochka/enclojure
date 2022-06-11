@@ -1,46 +1,40 @@
 module Enclojure.Value exposing
     ( Value
-    , exception
-    , float
-    , fn
-    , inspect
-    , inspectLocated
-    , inspectType
-    , int
-    , isEqual
-    , isTruthy
-    , keyword
-    , list
-    , map
-    , nil
-    , string
-    , symbol
-    , throwable
-    , toMap
-    , toSeq
-    , toString
-    , tryAtom
-    , tryDictOf
-    , tryFloat
-    , tryInt
-    , tryKeyword
-    , tryList
-    , tryListOf
-    , tryMap
-    , tryNil
-    , tryOneOf
-    , tryPatternOf2
-    , tryRef
-    , tryRegex
-    , trySequenceOf
-    , tryString
-    , trySymbol
-    , tryVector
-    , tryVectorOf
-    , vector
-    , vectorFromList
-    , vectorFromLocatedList
+    , inspect, inspectLocated, inspectType, isEqual, isTruthy
+    , toMap, toSeq, toString
+    , exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
+    , tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef
+    , tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
     )
+
+{-| Functions for working with Enclojure values and translating between Elm and Enclojure types.
+
+
+# Value type
+
+@docs Value
+
+
+# Inspecting values
+
+@docs inspect, inspectLocated, inspectType, isEqual, isTruthy
+
+
+# Transforming values
+
+@docs toMap, toSeq, toString
+
+
+# Encoding values
+
+@docs exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
+
+
+# Decoding values
+
+@docs tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex trySequenceOf tryString trySymbol tryVector tryVectorOf
+
+-}
 
 import Array
 import Dict
@@ -57,7 +51,7 @@ type alias Value io =
     Common.Value io
 
 
-{-| Attempts to interpret a given value to a sequence (list).
+{-| Attempts to interpret a given value as a sequence (list).
 -}
 toSeq : Value io -> Result Exception (List (Located (Value io)))
 toSeq val =
