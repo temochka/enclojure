@@ -1,6 +1,7 @@
 module Docs exposing (..)
 
 import Browser
+import Browser.Navigation
 import Element exposing (Element)
 import Element.Font
 import Element.Input
@@ -8,11 +9,12 @@ import Element.Keyed
 import Enclojure
 import File.Download
 import Html
-
+import Url exposing (Url)
 
 
 type alias Model =
-    { query : String
+    { navigationKey : Browser.Navigation.Key
+    , query : String
     , docs : List ( Enclojure.Doc, Enclojure.FnInfo )
     , matchingDocs : List ( Enclojure.Doc, Enclojure.FnInfo )
     }
@@ -20,11 +22,13 @@ type alias Model =
 
 type Message
     = UpdateQuery String
-    | ExportMd
+    | Download
+    | Nop
+    | RequestUrl Browser.UrlRequest
 
 
-init : ( Model, Cmd Message )
-init =
+init : () -> Url -> Browser.Navigation.Key -> ( Model, Cmd Message )
+init _ currentUrl navigationKey =
     let
         docs =
             Enclojure.documentation Enclojure.init
@@ -32,6 +36,7 @@ init =
     ( { query = ""
       , docs = docs
       , matchingDocs = docs
+      , navigationKey = navigationKey
       }
     , Cmd.none
     )
@@ -110,29 +115,33 @@ symbolInfoMd ( docType, { name, doc, signatures } ) =
         doc
 
 
-view : Model -> Html.Html Message
+view : Model -> Browser.Document Message
 view model =
-    Element.column
-        [ Element.padding 20
-        , Element.spacing 25
-        , Element.width Element.fill
-        ]
-        [ Element.row [ Element.spacing 25, Element.width Element.fill ]
-            [ Element.el [ Element.Font.size 25, Element.Font.semiBold ] (Element.text "Enclojure API")
-            , Element.link [] { url = "https://github.com/temochka/enclojure", label = Element.text "GitHub" }
-            , Element.Input.button [] { onPress = Just ExportMd, label = Element.text "Export" }
-            , Element.Input.text
-                [ Element.width Element.fill ]
-                { onChange = UpdateQuery
-                , text = model.query
-                , placeholder = Just (Element.Input.placeholder [] (Element.text "Filter docs..."))
-                , label = Element.Input.labelHidden "Search docs"
-                }
+    { title = "Enclojure"
+    , body =
+        [ Element.column
+            [ Element.padding 20
+            , Element.spacing 25
+            , Element.width Element.fill
             ]
-        , Element.Keyed.column [ Element.width Element.fill, Element.spacing 20 ] <|
-            List.filterMap symbolInfo model.matchingDocs
+            [ Element.row [ Element.spacing 25, Element.width Element.fill ]
+                [ Element.el [ Element.Font.size 25, Element.Font.semiBold ] (Element.text "Enclojure API")
+                , Element.link [] { url = "https://github.com/temochka/enclojure", label = Element.text "GitHub" }
+                , Element.Input.button [] { onPress = Just Download, label = Element.text "Download" }
+                , Element.Input.text
+                    [ Element.width Element.fill ]
+                    { onChange = UpdateQuery
+                    , text = model.query
+                    , placeholder = Just (Element.Input.placeholder [] (Element.text "Filter docs..."))
+                    , label = Element.Input.labelHidden "Search docs"
+                    }
+                ]
+            , Element.Keyed.column [ Element.width Element.fill, Element.spacing 20 ] <|
+                List.filterMap symbolInfo model.matchingDocs
+            ]
+            |> Element.layout []
         ]
-        |> Element.layout []
+    }
 
 
 matchDocs : String -> List ( Enclojure.Doc, Enclojure.FnInfo ) -> List ( Enclojure.Doc, Enclojure.FnInfo )
@@ -159,7 +168,19 @@ update msg model =
             , Cmd.none
             )
 
-        ExportMd ->
+        RequestUrl urlRequest ->
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model
+                    , Browser.Navigation.pushUrl model.navigationKey (Url.toString url)
+                    )
+
+                Browser.External url ->
+                    ( model
+                    , Browser.Navigation.load url
+                    )
+
+        Download ->
             let
                 markdown =
                     "# Enclojure API\n\n" ++ (model.docs |> List.filterMap symbolInfoMd |> String.join "\n\n")
@@ -168,7 +189,17 @@ update msg model =
             , File.Download.string "API.md" "text/markdown" markdown
             )
 
+        Nop ->
+            ( model, Cmd.none )
+
 
 main : Program () Model Message
 main =
-    Browser.element { init = always init, subscriptions = always Sub.none, view = view, update = update }
+    Browser.application
+        { init = init
+        , subscriptions = always Sub.none
+        , view = view
+        , update = update
+        , onUrlRequest = RequestUrl
+        , onUrlChange = always Nop
+        }
