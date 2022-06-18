@@ -12,19 +12,36 @@ import Html
 import Url exposing (Url)
 
 
-type alias Model =
-    { navigationKey : Browser.Navigation.Key
-    , query : String
+type Page
+    = Docs
+    | Repl
+    | NotFound
+
+
+type alias DocsPage =
+    { query : String
     , docs : List ( Enclojure.Doc, Enclojure.FnInfo )
     , matchingDocs : List ( Enclojure.Doc, Enclojure.FnInfo )
     }
 
 
-type Message
+type alias Model =
+    { navigationKey : Browser.Navigation.Key
+    , docsPage : DocsPage
+    , currentPage : Page
+    }
+
+
+type DocsMessage
     = UpdateQuery String
     | Download
+
+
+type Message
+    = OnDocsPage DocsMessage
     | Nop
     | RequestUrl Browser.UrlRequest
+    | RouteUrl Url
 
 
 init : () -> Url -> Browser.Navigation.Key -> ( Model, Cmd Message )
@@ -33,10 +50,9 @@ init _ currentUrl navigationKey =
         docs =
             Enclojure.documentation Enclojure.init
     in
-    ( { query = ""
-      , docs = docs
-      , matchingDocs = docs
+    ( { docsPage = { query = "", docs = docs, matchingDocs = docs }
       , navigationKey = navigationKey
+      , currentPage = routeUrl currentUrl
       }
     , Cmd.none
     )
@@ -115,6 +131,33 @@ symbolInfoMd ( docType, { name, doc, signatures } ) =
         doc
 
 
+viewDocs : DocsPage -> Element Message
+viewDocs model =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing 20
+        ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spacing 10
+            ]
+            [ Element.Input.button []
+                { onPress = Just (OnDocsPage Download)
+                , label = Element.text "Download as Markdown"
+                }
+            , Element.Input.text
+                [ Element.width Element.fill ]
+                { onChange = UpdateQuery >> OnDocsPage
+                , text = model.query
+                , placeholder = Just (Element.Input.placeholder [] (Element.text "Filter docs..."))
+                , label = Element.Input.labelHidden "Search docs"
+                }
+            ]
+        , Element.Keyed.column [ Element.width Element.fill, Element.spacing 20 ] <|
+            List.filterMap symbolInfo model.matchingDocs
+        ]
+
+
 view : Model -> Browser.Document Message
 view model =
     { title = "Enclojure"
@@ -126,18 +169,25 @@ view model =
             ]
             [ Element.row [ Element.spacing 25, Element.width Element.fill ]
                 [ Element.el [ Element.Font.size 25, Element.Font.semiBold ] (Element.text "Enclojure API")
+                , Element.link [] { url = "/docs", label = Element.text "Docs" }
+                , Element.link [] { url = "/repl", label = Element.text "REPL" }
                 , Element.link [] { url = "https://github.com/temochka/enclojure", label = Element.text "GitHub" }
-                , Element.Input.button [] { onPress = Just Download, label = Element.text "Download" }
-                , Element.Input.text
-                    [ Element.width Element.fill ]
-                    { onChange = UpdateQuery
-                    , text = model.query
-                    , placeholder = Just (Element.Input.placeholder [] (Element.text "Filter docs..."))
-                    , label = Element.Input.labelHidden "Search docs"
-                    }
                 ]
-            , Element.Keyed.column [ Element.width Element.fill, Element.spacing 20 ] <|
-                List.filterMap symbolInfo model.matchingDocs
+            , case model.currentPage of
+                Docs ->
+                    viewDocs model.docsPage
+
+                Repl ->
+                    Element.none
+
+                NotFound ->
+                    Element.el
+                        [ Element.width Element.fill, Element.height Element.fill ]
+                        (Element.column [ Element.centerX, Element.centerY ]
+                            [ Element.text "Page Not Found"
+                            , Element.link [] { url = "/docs", label = Element.text "Return to Docs" }
+                            ]
+                        )
             ]
             |> Element.layout []
         ]
@@ -157,8 +207,8 @@ matchDocs query =
         )
 
 
-update : Message -> Model -> ( Model, Cmd Message )
-update msg model =
+updateDocs : DocsMessage -> DocsPage -> ( DocsPage, Cmd Message )
+updateDocs msg model =
     case msg of
         UpdateQuery query ->
             ( { model
@@ -168,6 +218,32 @@ update msg model =
             , Cmd.none
             )
 
+        Download ->
+            let
+                markdown =
+                    "# Enclojure API\n\n" ++ (model.docs |> List.filterMap symbolInfoMd |> String.join "\n\n")
+            in
+            ( model
+            , File.Download.string "API.md" "text/markdown" markdown
+            )
+
+
+routeUrl : Url -> Page
+routeUrl url =
+    case url.path of
+        "/docs" ->
+            Docs
+
+        "/repl" ->
+            Repl
+
+        _ ->
+            NotFound
+
+
+update : Message -> Model -> ( Model, Cmd Message )
+update msg model =
+    case msg of
         RequestUrl urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -180,14 +256,12 @@ update msg model =
                     , Browser.Navigation.load url
                     )
 
-        Download ->
-            let
-                markdown =
-                    "# Enclojure API\n\n" ++ (model.docs |> List.filterMap symbolInfoMd |> String.join "\n\n")
-            in
-            ( model
-            , File.Download.string "API.md" "text/markdown" markdown
-            )
+        RouteUrl url ->
+            ( { model | currentPage = routeUrl url }, Cmd.none )
+
+        OnDocsPage docsMessage ->
+            updateDocs docsMessage model.docsPage
+                |> Tuple.mapFirst (\m -> { model | docsPage = m })
 
         Nop ->
             ( model, Cmd.none )
@@ -201,5 +275,5 @@ main =
         , view = view
         , update = update
         , onUrlRequest = RequestUrl
-        , onUrlChange = always Nop
+        , onUrlChange = RouteUrl
         }
