@@ -7,6 +7,7 @@ import Element.Font
 import Element.Input
 import Element.Keyed
 import Enclojure
+import Enclojure.Value
 import File.Download
 import Html
 import Url exposing (Url)
@@ -25,6 +26,27 @@ type alias DocsPage =
     }
 
 
+type ReplHistory
+    = Input Int String
+    | Output Int String
+
+
+type alias IO =
+    ()
+
+
+type Interpreter
+    = Ready (Enclojure.Env IO)
+    | Running
+
+
+type alias ReplPage =
+    { code : String
+    , history : List ReplHistory
+    , interpreter : Interpreter
+    }
+
+
 type alias Model =
     { navigationKey : Browser.Navigation.Key
     , docsPage : DocsPage
@@ -35,6 +57,11 @@ type alias Model =
 type DocsMessage
     = UpdateQuery String
     | Download
+
+
+type ReplMessage
+    = UpdateCode String
+    | Eval
 
 
 type Message
@@ -226,6 +253,16 @@ updateDocs msg model =
             ( model
             , File.Download.string "API.md" "text/markdown" markdown
             )
+
+
+updateRepl : ReplMessage -> ReplPage -> ( ReplPage, Cmd Message )
+updateRepl msg model =
+    case msg of
+        UpdateCode code ->
+            ( { model | code = code }, Cmd.none )
+
+        Eval ->
+            ( model, Cmd.none )
 
 
 routeUrl : Url -> Page
