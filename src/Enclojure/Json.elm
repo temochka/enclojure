@@ -1,25 +1,44 @@
-module Enclojure.Json exposing (decodeFromString, encodeToString)
+module Enclojure.Json exposing
+    ( decodeFromString, encodeToString
+    , decodeValue, encodeValue
+    )
+
+{-| Utilities for converting between JSON and Enclojure values.
+
+
+# Working with JSON strings
+
+@docs decodeFromString, encodeToString
+
+
+# Working with JSON values
+
+@docs decodeValue, encodeValue
+
+-}
 
 import Array
 import Dict exposing (Dict)
-import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Common exposing (Exception(..), Number(..), Ref(..), Value(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import Json.Decode
 import Json.Encode
 
 
-decode : Json.Decode.Decoder (Value io)
-decode =
+{-| A JSON decoder for Enclojure values.
+-}
+decodeValue : Json.Decode.Decoder (Value io)
+decodeValue =
     Json.Decode.oneOf
         [ Json.Decode.string |> Json.Decode.map String
         , Json.Decode.bool |> Json.Decode.map Bool
         , Json.Decode.int |> Json.Decode.map (Int >> Number)
         , Json.Decode.float |> Json.Decode.map (Float >> Number)
         , Json.Decode.null Nil
-        , Json.Decode.array (Json.Decode.lazy (\_ -> decode)) |> Json.Decode.map (Array.map Located.unknown >> Vector)
-        , Json.Decode.dict (Json.Decode.lazy (\_ -> decode))
+        , Json.Decode.array (Json.Decode.lazy (\_ -> decodeValue)) |> Json.Decode.map (Array.map Located.unknown >> Vector)
+        , Json.Decode.dict (Json.Decode.lazy (\_ -> decodeValue))
             |> Json.Decode.map
                 (Dict.toList
                     >> List.map (\( k, v ) -> ( String k, Located.unknown v ))
@@ -29,9 +48,11 @@ decode =
         ]
 
 
+{-| Accepts a JSON string. Returns the result of parsing this string as an Enclojure value.
+-}
 decodeFromString : String -> Result Exception (Value io)
 decodeFromString json =
-    Json.Decode.decodeString decode json
+    Json.Decode.decodeString decodeValue json
         |> Result.mapError
             (Json.Decode.errorToString
                 >> String.append "JSON parsing error: "
@@ -55,13 +76,15 @@ toDict map =
                     _ ->
                         Nothing
                 )
-                    |> Maybe.map (\stringKey -> ( stringKey, encode v ))
+                    |> Maybe.map (\stringKey -> ( stringKey, encodeValue v ))
             )
         |> Dict.fromList
 
 
-encode : Value io -> Json.Encode.Value
-encode val =
+{-| A JSON encoder for Enclojure values.
+-}
+encodeValue : Value io -> Json.Encode.Value
+encodeValue val =
     case val of
         Number n ->
             case n of
@@ -86,10 +109,10 @@ encode val =
             Json.Encode.null
 
         List l ->
-            Json.Encode.list encode (List.map Located.getValue l)
+            Json.Encode.list encodeValue (List.map Located.getValue l)
 
         Vector a ->
-            Json.Encode.array encode (Array.map Located.getValue a)
+            Json.Encode.array encodeValue (Array.map Located.getValue a)
 
         Nil ->
             Json.Encode.null
@@ -104,13 +127,13 @@ encode val =
             Json.Encode.dict identity identity (toDict vm)
 
         MapEntry ( k, Located _ v ) ->
-            Json.Encode.list encode [ k, v ]
+            Json.Encode.list encodeValue [ k, v ]
 
         Regex s _ ->
             Json.Encode.string s
 
         Set vs ->
-            Json.Encode.list encode (ValueSet.toList vs)
+            Json.Encode.list encodeValue (ValueSet.toList vs)
 
         Symbol s ->
             Json.Encode.string s
@@ -119,6 +142,8 @@ encode val =
             Json.Encode.null
 
 
+{-| Accepts an Enclojure value, returns its JSON representation as a string.
+-}
 encodeToString : Value io -> String
 encodeToString val =
-    Json.Encode.encode 0 (encode val)
+    Json.Encode.encode 0 (encodeValue val)
