@@ -5,7 +5,7 @@
     "source-directories": [
         "src"
     ],
-    "version": "1.1.0",
+    "version": "1.2.0",
     "exposed-modules": [
         "Enclojure",
         "Enclojure.Callable",

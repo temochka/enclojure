@@ -3,7 +3,7 @@ module Enclojure.Value exposing
     , inspect, inspectLocated, inspectType, isEqual, isTruthy
     , toMap, toSeq, toString
     , exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
-    , tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
+    , tryAtom, tryBool, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
     )
 
 {-| Functions for working with Enclojure values and translating between Elm and Enclojure types.
@@ -31,7 +31,7 @@ module Enclojure.Value exposing
 
 # Decoding values
 
-@docs tryAtom, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
+@docs tryAtom, tryBool, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
 
 -}
 
@@ -104,6 +104,18 @@ tryString : Value io -> Maybe String
 tryString value =
     case value of
         String s ->
+            Just s
+
+        _ ->
+            Nothing
+
+
+{-| Returns a bool if the given value is a string.
+-}
+tryBool : Value io -> Maybe Bool
+tryBool value =
+    case value of
+        Bool s ->
             Just s
 
         _ ->
