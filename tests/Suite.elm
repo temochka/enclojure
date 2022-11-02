@@ -107,6 +107,7 @@ suite =
             ]
         , describe "keywords"
             [ ":foo" |> (expectValue <| Keyword "foo")
+            , ":0" |> (expectValue <| Keyword "0")
             , ":a-b$c_d?e+f/g*h>i<j=k'l&m%n?o.p$q_" |> (expectValue <| Keyword "a-b$c_d?e+f/g*h>i<j=k'l&m%n?o.p$q_")
             , "(:foo {:foo 42})" |> (expectValue <| Number <| Int 42)
             , "(:foo nil :bar)" |> (expectValue <| Keyword "bar")

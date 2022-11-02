@@ -1,10 +1,10 @@
 module Enclojure.Reader exposing (parse)
 
 import Array
+import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
-import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMapEntry)
 import Enclojure.ValueSet as ValueSet
 import Parser exposing ((|.), (|=), Parser)
@@ -127,9 +127,12 @@ symbol =
 
 keyword : Parser (Value io)
 keyword =
-    Parser.succeed Keyword
-        |. Parser.symbol ":"
-        |= symbolLike
+    Parser.variable
+        { start = \c -> c == ':'
+        , inner = \c -> Char.isAlphaNum c || isAllowedSymbolSpecialChar c
+        , reserved = Set.empty
+        }
+        |> Parser.map (String.dropLeft 1 >> Keyword)
 
 
 expressionsHelper : List (Located (Value io)) -> Parser (Parser.Step (List (Located (Value io))) (List (Located (Value io))))
