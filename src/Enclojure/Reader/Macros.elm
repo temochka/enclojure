@@ -87,6 +87,31 @@ the value of the last expr. (and) returns true."""
         }
         expandAnd
     , Macro
+        { name = Just "case"
+        , doc = Just """Takes an expression and a set of test/expr pairs. Each clause can take the form of either:
+  test-constant result-expr
+  (test-constant1 ... test-constantN)  result-expr
+
+  The test-constants are not evaluated. They must be compile-time
+  literals, and need not be quoted.  If the expression is equal to a
+  test-constant, the corresponding result-expr is returned. A single
+  default expression can follow the clauses, and its value will be
+  returned if no clause matches. If no default expression is provided
+  and no clause matches, an exception is thrown.
+
+  Unlike Clojure, the clauses are considered sequentially.
+  The current implementation doesn't throw on redundant test expressions.
+  All manner of constant
+  expressions are acceptable in case, including numbers, strings,
+  symbols, keywords, and (Clojure) composites thereof. Note that since
+  lists are used to group multiple constants that map to the same
+  expression, a vector can be used to match a list if needed. The
+  test-constants need not be all of the same type.
+"""
+        , signatures = [ [ "e", "&", "clauses" ] ]
+        }
+        expandCase
+    , Macro
         { name = Just "cond"
         , doc = Just """Takes a set of test/expr pairs. It evaluates each test one at a
 time.  If a test returns logical true, cond evaluates and returns
@@ -586,6 +611,84 @@ expandWhenNot i (Located loc args) =
 
         [] ->
             Err (Exception "Argument error: wrong number of arguments (0) passed to when-not" [])
+
+
+expandCase : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandCase i (Located loc args) =
+    case args of
+        (Located exprLoc expr) :: clauses ->
+            let
+                id =
+                    "case__" ++ String.fromInt i ++ "__auto__"
+
+                parseClauses remainingClauses =
+                    case remainingClauses of
+                        (Located testLoc (List tests)) :: ret :: rest ->
+                            Located testLoc
+                                (List
+                                    [ Located testLoc (Symbol "or")
+                                    , parseClauses (List.concatMap (\test -> [ test, ret ]) tests)
+                                    , parseClauses rest
+                                    ]
+                                )
+
+                        (Located testLoc test) :: ret :: rest ->
+                            Located testLoc
+                                (List
+                                    [ Located testLoc (Symbol "if")
+                                    , Located testLoc
+                                        (List
+                                            [ Located testLoc (Symbol "=")
+                                            , Located testLoc (Symbol id)
+                                            , Located testLoc
+                                                (List
+                                                    [ Located testLoc (Symbol "quote")
+                                                    , Located testLoc test
+                                                    ]
+                                                )
+                                            ]
+                                        )
+                                    , ret
+                                    , parseClauses rest
+                                    ]
+                                )
+
+                        [ defaultClause ] ->
+                            defaultClause
+
+                        [] ->
+                            Located loc
+                                (List
+                                    [ Located loc (Symbol "throw")
+                                    , Located loc
+                                        (List
+                                            [ Located loc (Symbol "Exception.")
+                                            , Located loc
+                                                (List
+                                                    [ Located loc (Symbol "str")
+                                                    , Located loc (String "No matching clause: ")
+                                                    , Located exprLoc (Symbol id)
+                                                    ]
+                                                )
+                                            ]
+                                        )
+                                    ]
+                                )
+            in
+            Ok
+                ( i + 1
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "let")
+                        , Located loc
+                            (Vector (Array.fromList [ Located loc (Symbol id), Located loc expr ]))
+                        , parseClauses clauses
+                        ]
+                    )
+                )
+
+        _ ->
+            Err <| Value.exception "Wrong number of args (0) passed to: case"
 
 
 expandCond : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )

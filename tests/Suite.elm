@@ -306,6 +306,9 @@ suite =
             , "(= nil)" |> (expectValue <| Bool True)
             , "(= 1 1)" |> (expectValue <| Bool True)
             , "(= 1 2)" |> (expectValue <| Bool False)
+            , "(= () [])" |> (expectValue <| Bool True)
+            , "(= [] ())" |> (expectValue <| Bool True)
+            , "(= (list 1 2) [1 2])" |> (expectValue <| Bool True)
             ]
         , describe "not="
             [ "(not=)" |> expectException "Invalid arity 0"
@@ -369,6 +372,20 @@ suite =
                 |> (expectValue <| Set <| ValueSet.fromList [ Keyword "foo", Keyword "bar" ])
             , "(and nil :bar)" |> expectValue Nil
             , "(and true true true true true false :foo)" |> (expectValue <| Bool False)
+            ]
+        , describe "case"
+            [ "(case)" |> expectException "Wrong number of args (0) passed to: case at row 1, col 7"
+            , "(case 42)" |> expectException "No matching clause: 42"
+            , "(case 42 43)" |> (expectValue <| Number <| Int 43)
+            , "(case 42 43 44)" |> expectException "No matching clause: 42"
+            , "(case 42 43 44 42 45)" |> (expectValue <| Number <| Int 45)
+            , "(case :foo :foo :match)" |> (expectValue <| Keyword "match")
+            , "(case 42 (42 45) :match)" |> (expectValue <| Keyword "match")
+            , "(case (list 42 45) [42 45] :match)" |> (expectValue <| Keyword "match")
+
+            -- compile time values only:
+            , "(let [foo 42] (case 42 foo :bar))" |> expectException "No matching clause: 42"
+            , "(case (list 42 45) (42 45) :match (list 42 45) :nomatch)" |> expectException "No matching clause: (42 45)"
             ]
         , describe "cond"
             [ "(cond (< 2 4) :foo)" |> (expectValue <| Keyword "foo")

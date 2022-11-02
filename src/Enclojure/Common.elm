@@ -265,6 +265,12 @@ areEqualValues a b =
             ( Vector vectorA, Vector vectorB ) ->
                 areEqualLocatedLists (Array.toList vectorA) (Array.toList vectorB)
 
+            ( Vector vectorA, List listB ) ->
+                areEqualLocatedLists (Array.toList vectorA) listB
+
+            ( List listA, Vector vectorB ) ->
+                areEqualLocatedLists listA (Array.toList vectorB)
+
             ( Map mapA, Map mapB ) ->
                 areEqualMaps mapA mapB
 
