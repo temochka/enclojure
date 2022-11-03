@@ -63,21 +63,21 @@ type alias Callable io =
     }
 
 
-type alias ValueMapEntry io =
-    ( Value io, Located (Value io) )
+type alias ValueMapEntry io v =
+    ( Value io, v )
 
 
-type ValueMap io
+type ValueMap io v
     = ValueMap
-        { ints : Dict Int (Located (Value io))
-        , floats : Dict Float (Located (Value io))
-        , strings : Dict String (Located (Value io))
-        , keywords : Dict String (Located (Value io))
-        , symbols : Dict String (Located (Value io))
-        , nil : Maybe (Located (Value io))
-        , true : Maybe (Located (Value io))
-        , false : Maybe (Located (Value io))
-        , otherValues : List ( Value io, Located (Value io) )
+        { ints : Dict Int v
+        , floats : Dict Float v
+        , strings : Dict String v
+        , keywords : Dict String v
+        , symbols : Dict String v
+        , nil : Maybe v
+        , true : Maybe v
+        , false : Maybe v
+        , otherValues : List ( Value io, v )
         }
 
 
@@ -122,8 +122,8 @@ type Value io
     | Nil
     | Bool Basics.Bool
     | Keyword String
-    | Map (ValueMap io)
-    | MapEntry (ValueMapEntry io)
+    | Map (ValueMap io (Located (Value io)))
+    | MapEntry (ValueMapEntry io (Located (Value io)))
     | Regex String Regex
     | Set (ValueSet io)
     | Symbol String
@@ -196,7 +196,7 @@ areEqualDictEntries f a b =
             False
 
 
-areEqualMaps : ValueMap io -> ValueMap io -> Bool
+areEqualMaps : ValueMap io (Located (Value io)) -> ValueMap io (Located (Value io)) -> Bool
 areEqualMaps (ValueMap a) (ValueMap b) =
     a
         == b

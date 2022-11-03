@@ -57,7 +57,7 @@ import Enclojure.Reader as Reader
 import Enclojure.Reader.Macros as Macros
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value
-import Enclojure.ValueMap as ValueMap
+import Enclojure.ValueMap as ValueMap exposing (ValueMap, ValueMapEntry)
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 import Parser
 
@@ -208,7 +208,7 @@ evalVector (Located loc vecV) env k =
         )
 
 
-evalMap : Located (Enclojure.Common.ValueMap io) -> Env io -> Continuation io -> Step io
+evalMap : Located (ValueMap io) -> Env io -> Continuation io -> Step io
 evalMap (Located mapLoc map) env k =
     Located mapLoc
         ( Ok ( Const (Map ValueMap.empty), env )
@@ -258,7 +258,7 @@ evalMap (Located mapLoc map) env k =
         )
 
 
-evalMapEntry : Located (Enclojure.Common.ValueMapEntry io) -> Env io -> Continuation io -> Step io
+evalMapEntry : Located (ValueMapEntry io) -> Env io -> Continuation io -> Step io
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located.unknown key)
         env
