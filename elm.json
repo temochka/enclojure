@@ -3,7 +3,7 @@
     "name": "temochka/enclojure",
     "summary": "A Clojure-like scripting language for Elm apps.",
     "license": "BSD-3-Clause",
-    "version": "1.2.2",
+    "version": "2.0.0",
     "exposed-modules": [
         "Enclojure",
         "Enclojure.Callable",
