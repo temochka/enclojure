@@ -2,7 +2,7 @@ module Enclojure.Value exposing
     ( Value
     , inspect, inspectLocated, inspectType, isEqual, isTruthy
     , toMap, toSeq, toString
-    , exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
+    , boolean, exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
     , tryAtom, tryBool, tryDictOf, tryFloat, tryInt, tryKeyword, tryList, tryListOf, tryMap, tryNil, tryOneOf, tryPatternOf2, tryRef, tryRegex, trySequenceOf, tryString, trySymbol, tryVector, tryVectorOf
     )
 
@@ -26,7 +26,7 @@ module Enclojure.Value exposing
 
 # Encoding values
 
-@docs exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
+@docs boolean, exception, float, fn, int, keyword, list, map, nil, string, symbol, throwable, vector, vectorFromList, vectorFromLocatedList
 
 
 # Decoding values
@@ -529,6 +529,13 @@ symbol =
 nil : Value io
 nil =
     Nil
+
+
+{-| Returns a boolean value for a given Elm Bool.
+-}
+boolean : Bool -> Value io
+boolean =
+    Bool
 
 
 {-| Wraps a value map as a map value.
