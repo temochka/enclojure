@@ -45,7 +45,7 @@ This is what an Enclojure script looks like:
 * No reader tags.
 * No transducers.
 * No `catch`: to discourage exception-based control flow and treat exceptions as panic.
-* No `loop`: any function can be recursive without overflowing the stack.
+* `loop` is a macro that expands to a recursive function call (any function can be recursive without overflowing the stack).
 * Only integers and floats are supported: ratios, big integers, long, etc. are out of scope.
 * Every `cond` is a `cond-let`.
 * No watch functions on atoms.
