@@ -822,6 +822,20 @@ Usage:
 
 Return true if x is a List
 
+## loop
+
+`(macro)`
+
+Usage:
+
+```
+(loop [bindings*] exprs*)
+```
+
+Evaluates the exprs in a lexical context in which the symbols in
+the binding-forms are bound to their respective init-exprs or parts
+therein. Acts as a recur target.
+
 ## map
 
 `(function)`
@@ -1438,6 +1452,19 @@ Usage:
 ```
 
 Evaluates test. If logical false, evaluates body in an implicit do.
+
+## while
+
+`(macro)`
+
+Usage:
+
+```
+(while test & body)
+```
+
+Repeatedly executes body while test expression is true. Presumes
+some side-effect will cause test to become false/nil. Returns nil
 
 ## zero?
 

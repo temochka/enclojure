@@ -172,6 +172,14 @@ test, if not, yields else"""
         }
         expandIfLet
     , Macro
+        { name = Just "loop"
+        , doc = Just """Evaluates the exprs in a lexical context in which the symbols in
+the binding-forms are bound to their respective init-exprs or parts
+therein. Acts as a recur target."""
+        , signatures = [ [ "[bindings*]", "exprs*" ] ]
+        }
+        expandLoop
+    , Macro
         { name = Just "or"
         , doc = Just """Evaluates exprs one at a time, from left to right. If a form
 returns a logical true value, or returns that value and doesn't
@@ -214,6 +222,13 @@ When test is true, evaluates body with binding-form bound to the value of test""
         , signatures = [ [ "test", "&", "body" ] ]
         }
         expandWhenNot
+    , Macro
+        { name = Just "while"
+        , doc = Just """Repeatedly executes body while test expression is true. Presumes
+some side-effect will cause test to become false/nil. Returns nil"""
+        , signatures = [ [ "test", "&", "body" ] ]
+        }
+        expandWhile
     , Macro
         { name = Just "->"
         , doc = Just """Threads the expr through the forms. Inserts x as the
@@ -539,6 +554,47 @@ expandAnd i (Located loc args) =
             Ok ( i, Located loc (Bool True) )
 
 
+expandLoop : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandLoop i (Located loc args) =
+    let
+        toArgsAndValues argSymbols values bindings =
+            case bindings of
+                [] ->
+                    Ok ( List.reverse argSymbols, List.reverse values )
+
+                a :: v :: rest ->
+                    toArgsAndValues (a :: argSymbols) (v :: values) rest
+
+                _ ->
+                    Err (Value.exception "Uneven number of loop bindings")
+    in
+    case args of
+        (Located _ (Vector bindings)) :: loopBody ->
+            bindings
+                |> Array.toList
+                |> toArgsAndValues [] []
+                |> Result.map
+                    (\( argSymbols, argValues ) ->
+                        ( i
+                        , Located loc
+                            (List
+                                (Located loc
+                                    (List
+                                        (Located loc (Symbol "fn")
+                                            :: Located loc (Vector (Array.fromList argSymbols))
+                                            :: loopBody
+                                        )
+                                    )
+                                    :: argValues
+                                )
+                            )
+                        )
+                    )
+
+        _ ->
+            Err <| Value.exception "Invalid number of arguments to loop"
+
+
 expandOr : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandOr i (Located loc args) =
     case args of
@@ -611,6 +667,32 @@ expandWhenNot i (Located loc args) =
 
         [] ->
             Err (Exception "Argument error: wrong number of arguments (0) passed to when-not" [])
+
+
+expandWhile : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandWhile i (Located loc args) =
+    case args of
+        test :: body ->
+            Ok
+                ( i
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "loop")
+                        , Located loc (Vector Array.empty)
+                        , Located loc
+                            (List
+                                (Located loc (Symbol "when")
+                                    :: test
+                                    :: Located loc (List (Located loc (Symbol "do") :: body))
+                                    :: [ Located loc (List [ Located loc (Symbol "recur") ]) ]
+                                )
+                            )
+                        ]
+                    )
+                )
+
+        _ ->
+            Err (Value.exception "invalid number of arguments provided to while")
 
 
 expandCase : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )

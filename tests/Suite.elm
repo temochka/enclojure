@@ -458,6 +458,8 @@ suite =
             , "(if-let [a :then] a :else)" |> (expectValue <| Keyword "then")
             , "(if-let [a :then] a :else :or-else)" |> (expectException <| "an if with too many forms")
             ]
+        , describe "loop"
+            [ "(loop [i 0] (if (< i 10) (recur (inc i)) i))" |> (expectValue <| Number <| Int 10) ]
         , describe "or"
             [ "(or)" |> expectValue Nil
             , "(or false)" |> expectValue Nil
@@ -495,6 +497,8 @@ suite =
             , "(when-not false (def a 1) (def b 2) (def c 3) (+ a b c))" |> (expectValue <| Number <| Int 6)
             , "(when-not true 42)" |> expectValue Nil
             ]
+        , describe "while"
+            [ "(let [foo (atom 10)] (while (pos? (deref foo)) (swap! foo dec)))" |> expectValue Nil ]
         , describe "->"
             [ "(-> :ret)" |> (expectValue <| Keyword "ret")
             , "(-> {:foo :bar} (assoc :buz :boo) (dissoc :foo :buz))" |> (expectValue <| Map <| ValueMap.empty)
