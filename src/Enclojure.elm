@@ -37,6 +37,7 @@ module Enclojure exposing
 
 import Array exposing (Array)
 import Dict exposing (Dict)
+import Enclojure.Callable as Callable exposing (Callable)
 import Enclojure.Common
     exposing
         ( Continuation
@@ -48,6 +49,7 @@ import Enclojure.Common
         , Ref(..)
         , Thunk(..)
         , Value(..)
+        , toThunk
         )
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
@@ -901,6 +903,18 @@ evalDef (Located loc args) env k =
             Located loc ( Err ( Value.exception "no arguments to def" |> Runtime.throw env, env ), Just (Thunk k) )
 
 
+evalCallable : Callable io
+evalCallable =
+    let
+        arity1 form env1 k =
+            evalExpression (Located.unknown form) env1 k
+                |> Located.getValue
+    in
+    Callable.new
+        |> Callable.setArity1 (Enclojure.Common.Fixed (Value.symbol "str") arity1)
+        |> Callable.setDoc (Just "Evaluates the form data structure and returns the result.")
+
+
 wrapInDo : Located (List (Located (Value io))) -> Located (Value io)
 wrapInDo (Located loc vs) =
     Located loc (List (Located loc (Symbol "do") :: vs))
@@ -908,14 +922,23 @@ wrapInDo (Located loc vs) =
 
 prelude : Result Exception (List (Located (Value io)))
 prelude =
-    Reader.parse Lib.prelude
-        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw defaultEnv)
+    Reader.readString Lib.prelude
+        |> Result.mapError (Runtime.throw defaultEnv)
 
 
 defaultEnv : Env io
 defaultEnv =
     Runtime.emptyEnv
         |> Lib.init
+        -- Eval is implemented in this namespace so lib cannot provide it.
+        |> Runtime.bindGlobal "eval"
+            (Fn
+                { name = Just "eval"
+                , doc = evalCallable.doc
+                , signatures = Callable.signatures evalCallable
+                }
+                (toThunk evalCallable)
+            )
         |> LibString.init
 
 
@@ -929,62 +952,6 @@ init =
         |> Result.andThen (continueEvalPure { maxOps = Nothing })
         |> Result.map (\( _, env ) -> env)
         |> Result.withDefault defaultEnv
-
-
-deadEndsToString : List Parser.DeadEnd -> String
-deadEndsToString deadEnds =
-    String.concat (List.intersperse "; " (List.map deadEndToString deadEnds))
-
-
-deadEndToString : Parser.DeadEnd -> String
-deadEndToString deadend =
-    problemToString deadend.problem ++ " at row " ++ String.fromInt deadend.row ++ ", col " ++ String.fromInt deadend.col
-
-
-problemToString : Parser.Problem -> String
-problemToString p =
-    case p of
-        Parser.Expecting s ->
-            "expecting '" ++ s ++ "'"
-
-        Parser.ExpectingInt ->
-            "expecting int"
-
-        Parser.ExpectingHex ->
-            "expecting hex"
-
-        Parser.ExpectingOctal ->
-            "expecting octal"
-
-        Parser.ExpectingBinary ->
-            "expecting binary"
-
-        Parser.ExpectingFloat ->
-            "expecting float"
-
-        Parser.ExpectingNumber ->
-            "expecting number"
-
-        Parser.ExpectingVariable ->
-            "expecting variable"
-
-        Parser.ExpectingSymbol s ->
-            "expecting symbol '" ++ s ++ "'"
-
-        Parser.ExpectingKeyword s ->
-            "expecting keyword '" ++ s ++ "'"
-
-        Parser.ExpectingEnd ->
-            "expecting end"
-
-        Parser.UnexpectedChar ->
-            "unexpected char"
-
-        Parser.Problem s ->
-            s
-
-        Parser.BadRepeat ->
-            "bad repeat"
 
 
 {-| Represents an unfinished computation that can be continued using `continueEval`.
@@ -1020,8 +987,9 @@ the evaluation result and modified environment. May cause an infinite loop if Ev
 -}
 eval : EvalOptions -> Env io -> String -> ( EvalResult io, Env io )
 eval options initEnv code =
-    Reader.parse code
-        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw initEnv)
+    code
+        |> Reader.readString
+        |> Result.mapError (Runtime.throw initEnv)
         |> Result.map2
             (\a b -> a ++ b)
             prelude

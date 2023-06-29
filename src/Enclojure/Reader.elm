@@ -1,10 +1,11 @@
-module Enclojure.Reader exposing (parse)
+module Enclojure.Reader exposing (parse, readString)
 
 import Array
 import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
+import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap exposing (ValueMapEntry)
 import Enclojure.ValueSet as ValueSet
 import Parser exposing ((|.), (|=), Parser)
@@ -315,3 +316,67 @@ regex =
                     |> Maybe.map (Regex pattern >> Parser.succeed)
                     |> Maybe.withDefault (Parser.problem "invalid regex")
             )
+
+
+deadEndsToString : List Parser.DeadEnd -> String
+deadEndsToString deadEnds =
+    String.concat (List.intersperse "; " (List.map deadEndToString deadEnds))
+
+
+deadEndToString : Parser.DeadEnd -> String
+deadEndToString deadend =
+    problemToString deadend.problem ++ " at row " ++ String.fromInt deadend.row ++ ", col " ++ String.fromInt deadend.col
+
+
+problemToString : Parser.Problem -> String
+problemToString p =
+    case p of
+        Parser.Expecting s ->
+            "expecting '" ++ s ++ "'"
+
+        Parser.ExpectingInt ->
+            "expecting int"
+
+        Parser.ExpectingHex ->
+            "expecting hex"
+
+        Parser.ExpectingOctal ->
+            "expecting octal"
+
+        Parser.ExpectingBinary ->
+            "expecting binary"
+
+        Parser.ExpectingFloat ->
+            "expecting float"
+
+        Parser.ExpectingNumber ->
+            "expecting number"
+
+        Parser.ExpectingVariable ->
+            "expecting variable"
+
+        Parser.ExpectingSymbol s ->
+            "expecting symbol '" ++ s ++ "'"
+
+        Parser.ExpectingKeyword s ->
+            "expecting keyword '" ++ s ++ "'"
+
+        Parser.ExpectingEnd ->
+            "expecting end"
+
+        Parser.UnexpectedChar ->
+            "unexpected char"
+
+        Parser.Problem s ->
+            s
+
+        Parser.BadRepeat ->
+            "bad repeat"
+
+
+{-| Same as `parse` but converts parser errors to exceptions.
+-}
+readString : String -> Result Exception (List (Located (Value io)))
+readString s =
+    parse s
+        |> Result.mapError (deadEndsToString >> Value.exception)
