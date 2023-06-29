@@ -683,6 +683,11 @@ suite =
             , "(empty? {1 2})" |> (expectValue <| Bool False)
             , "(empty? #{1})" |> (expectValue <| Bool False)
             ]
+        , describe "eval"
+            [ "(eval '())" |> (expectValue <| List [])
+            , "(eval '(+ 40 2))" |> (expectValue <| Value.int 42)
+            , "(eval '(let [x 43] (dec x)))" |> (expectValue <| Value.int 42)
+            ]
         , describe "even?"
             [ "(even? 2)" |> (expectValue <| Bool True)
             , "(even? 3)" |> (expectValue <| Bool False)
@@ -1016,6 +1021,12 @@ suite =
             , "(range 0 5 -1)" |> expectValue (List [])
             , "(= (range 2 10 2) (list 2 4 6 8))" |> expectValue (Bool True)
             , "(= (range 10 -11 -5) (list 10 5 0 -5 -10))" |> expectValue (Bool True)
+            ]
+        , describe "read-string"
+            [ "(read-string \"()\")" |> expectValue (List [])
+            , "(read-string \"true\")" |> expectValue (Bool True)
+            , "(read-string \"41 42\")" |> expectValue (Value.int 41)
+            , "(read-string \"\")" |> expectException "EOF while reading"
             ]
         , describe "reduce"
             [ "(reduce + [])" |> (expectValue <| Number <| Int 0)

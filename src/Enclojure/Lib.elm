@@ -17,6 +17,7 @@ import Enclojure.Common as Common
         )
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
+import Enclojure.Reader as Reader
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value exposing (inspect, inspectType)
 import Enclojure.ValueMap as ValueMap
@@ -74,6 +75,7 @@ init env =
     , ( "peek", peek )
     , ( "pop", pop )
     , ( "pr-str", prStr )
+    , ( "read-string", readString )
     , ( "rem", rem )
     , ( "re-find", reFind )
     , ( "re-matches", reMatches )
@@ -1717,6 +1719,23 @@ nth =
         , arity3 = Just <| Fixed ( Symbol "coll", Symbol "index", Symbol "not-found" ) <| Callable.toArityFunction arity3
         , doc = Just """Returns the value at the index. get returns nil if index out of
 bounds, nth throws an exception unless not-found is supplied. nth also works for strings."""
+    }
+
+
+readString : Callable io
+readString =
+    let
+        arity1 s =
+            s
+                |> Value.tryString
+                |> Result.fromMaybe (Value.exception "type error: read-string expects a string argument")
+                |> Result.andThen Reader.readString
+                |> Result.andThen (List.head >> Result.fromMaybe (Value.exception "EOF while reading"))
+                |> Result.map (Located.getValue >> Const)
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed (Symbol "s") <| Callable.toArityFunction arity1
+        , doc = Just "Reads string s, returns the first object read or throws if nothing was read."
     }
 
 

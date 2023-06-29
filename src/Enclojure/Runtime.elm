@@ -52,6 +52,7 @@ import Enclojure.Common as Common
         , Value(..)
         )
 import Enclojure.Located as Located exposing (Located(..))
+import Enclojure.Reader as Reader
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)

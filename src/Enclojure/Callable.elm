@@ -2,6 +2,7 @@ module Enclojure.Callable exposing
     ( Callable, new
     , fixedArity, variadicArity, toArityFunction, setArity0, setArity1, setArity2, setArity3
     , signatures
+    , setDoc
     )
 
 {-| Helper functions for defining Enclojure callables.
@@ -47,6 +48,13 @@ new =
     , arity2 = Nothing
     , arity3 = Nothing
     }
+
+
+{-| Overwrite the doc on a callable.
+-}
+setDoc : Maybe String -> Callable io -> Callable io
+setDoc doc callable =
+    { callable | doc = doc }
 
 
 {-| Converts a simplified arity to full arity.
